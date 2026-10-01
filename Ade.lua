@@ -1017,6 +1017,233 @@ AddButton(Visuals, "Refresh", "Refresh fitur.", function()
 end)
 
 --========================================================--
+-- ESP BODY (User Code - Unchanged)
+--========================================================--
+
+local ADEX_EspBodyLoaded = false
+local ADEX_EspBodyEnabled = false
+
+AddSection(Visuals, "ESP BODY")
+
+AddToggle(Visuals, "Esp Body", "Killer (Merah) / Survivor (Biru).", false, function(enabled)
+    ADEX_EspBodyEnabled = enabled
+
+    if enabled and not ADEX_EspBodyLoaded then
+        ADEX_EspBodyLoaded = true
+
+        --//=====================================================//
+        --//  USER CODE ESP BODY - TIDAK DIUBAH SAMA SEKALI      //
+        --//=====================================================//
+
+        --// ADEX BODY ESP
+        --// ROLE DETECTION
+        --// Killer   = RED
+        --// Survivor = BLUE
+
+        local Players = game:GetService("Players")
+        local LocalPlayer = Players.LocalPlayer
+
+        local COLORS = {
+            Killer = Color3.fromRGB(255, 45, 45),
+            Survivor = Color3.fromRGB(45, 140, 255),
+            Unknown = Color3.fromRGB(180, 180, 180)
+        }
+
+        local function NormalizeRole(value)
+            if value == nil then
+                return nil
+            end
+
+            local role = string.lower(tostring(value))
+            role = role:gsub("%s+", "")
+
+            if role == "killer"
+            or role == "killers" then
+                return "Killer"
+            end
+
+            if role == "survivor"
+            or role == "survivors" then
+                return "Survivor"
+            end
+
+            return nil
+        end
+
+        local function ReadValue(object)
+            if not object then
+                return nil
+            end
+
+            if object:IsA("StringValue")
+            or object:IsA("ObjectValue")
+            or object:IsA("IntValue")
+            or object:IsA("NumberValue") then
+                return object.Value
+            end
+
+            return nil
+        end
+
+        local function GetRole(player)
+            -- 1. Team
+            if player.Team then
+                local role = NormalizeRole(player.Team.Name)
+                if role then
+                    return role
+                end
+            end
+
+            -- 2. Attribute Role
+            local attributeRole = player:GetAttribute("Role")
+            local role = NormalizeRole(attributeRole)
+
+            if role then
+                return role
+            end
+
+            -- 3. Role langsung di Player
+            local roleObject = player:FindFirstChild("Role")
+            role = NormalizeRole(ReadValue(roleObject))
+
+            if role then
+                return role
+            end
+
+            -- 4. Leaderstats
+            local leaderstats = player:FindFirstChild("leaderstats")
+
+            if leaderstats then
+                local leaderRole = leaderstats:FindFirstChild("Role")
+
+                role = NormalizeRole(ReadValue(leaderRole))
+
+                if role then
+                    return role
+                end
+            end
+
+            -- 5. Character
+            local character = player.Character
+
+            if character then
+                local characterRole = character:FindFirstChild("Role")
+
+                role = NormalizeRole(ReadValue(characterRole))
+
+                if role then
+                    return role
+                end
+
+                -- Attribute Character
+                role = NormalizeRole(character:GetAttribute("Role"))
+
+                if role then
+                    return role
+                end
+            end
+
+            return "Unknown"
+        end
+
+        local function UpdateESP(player)
+            if player == LocalPlayer then
+                return
+            end
+
+            local character = player.Character
+            if not character then
+                return
+            end
+
+            local esp = character:FindFirstChild("ADEX_BodyESP")
+
+            if not esp then
+                esp = Instance.new("Highlight")
+                esp.Name = "ADEX_BodyESP"
+                esp.Adornee = character
+                esp.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                esp.FillTransparency = 0.55
+                esp.OutlineTransparency = 0
+                esp.Parent = character
+            end
+
+            local role = GetRole(player)
+            local color = COLORS.Unknown
+
+            if role == "Killer" then
+                color = COLORS.Killer
+            elseif role == "Survivor" then
+                color = COLORS.Survivor
+            end
+
+            esp.FillColor = color
+            esp.OutlineColor = color
+
+            -- Simpan role agar mudah dicek
+            esp:SetAttribute("DetectedRole", role)
+        end
+
+        local function SetupPlayer(player)
+            if player == LocalPlayer then
+                return
+            end
+
+            player.CharacterAdded:Connect(function()
+                task.wait(0.5)
+                UpdateESP(player)
+            end)
+
+            player:GetPropertyChangedSignal("Team"):Connect(function()
+                UpdateESP(player)
+            end)
+
+            player:GetAttributeChangedSignal("Role"):Connect(function()
+                UpdateESP(player)
+            end)
+
+            task.spawn(function()
+                while player.Parent do
+                    UpdateESP(player)
+                    task.wait(1)
+                end
+            end)
+
+            if player.Character then
+                UpdateESP(player)
+            end
+        end
+
+        for _, player in ipairs(Players:GetPlayers()) do
+            SetupPlayer(player)
+        end
+
+        Players.PlayerAdded:Connect(SetupPlayer)
+
+        --//=====================================================//
+        --//  END USER CODE - TIDAK DIUBAH SAMA SEKALI           //
+        --//=====================================================//
+
+        -- State applier eksternal (untuk fungsi ON/OFF toggle)
+        -- TIDAK menyentuh code user di atas
+        RunService.Heartbeat:Connect(function()
+            local fill = ADEX_EspBodyEnabled and 0.55 or 1
+            local outline = ADEX_EspBodyEnabled and 0 or 1
+
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p.Character then
+                    local esp = p.Character:FindFirstChild("ADEX_BodyESP")
+                    if esp then
+                        esp.FillTransparency = fill
+                        esp.OutlineTransparency = outline
+                    end
+                end
+            end
+        end)
+    end
+end)
+
+--========================================================--
 -- PLAYER CONTENT
 --========================================================--
 
