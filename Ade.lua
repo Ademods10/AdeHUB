@@ -1006,12 +1006,6 @@ end)
 --========================================================--
 
 AddSection(Visuals, "VISUAL FEATURES")
-AddToggle(Visuals, "Feature 1", "Tempat fitur visual.", false, function(v)
-    print("Feature 1:", v)
-end)
-AddToggle(Visuals, "Feature 2", "Contoh fitur visual kedua.", false, function(v)
-    print("Feature 2:", v)
-end)
 AddButton(Visuals, "Refresh", "Refresh fitur.", function()
     print("Refresh")
 end)
@@ -1240,6 +1234,174 @@ AddToggle(Visuals, "Esp Body", "Killer (Merah) / Survivor (Biru).", false, funct
                 end
             end
         end)
+    end
+end)
+
+--========================================================--
+-- CROSSHAIR V2 (User Code - Unchanged)
+--========================================================--
+
+local ADEX_CrosshairLoaded = false
+local ADEX_CrosshairEnabled = false
+local ADEX_CrosshairGui = nil
+local ADEX_CrosshairAutoGuard = nil
+
+AddSection(Visuals, "CROSSHAIR")
+
+AddToggle(Visuals, "Crosshair", "Titik crosshair di tengah layar.", false, function(enabled)
+    ADEX_CrosshairEnabled = enabled
+
+    if enabled and not ADEX_CrosshairLoaded then
+        ADEX_CrosshairLoaded = true
+
+        --//=====================================================//
+        --//  USER CODE CROSSHAIR V2 - TIDAK DIUBAH SAMA SEKALI  //
+        --//=====================================================//
+
+        --// ADEX DOT CROSSHAIR V2
+        --// LocalScript
+        --// StarterPlayer > StarterPlayerScripts
+
+        local Players = game:GetService("Players")
+        local RunService = game:GetService("RunService")
+
+        local Player = Players.LocalPlayer
+        local PlayerGui = Player:WaitForChild("PlayerGui")
+
+        local GUI_NAME = "ADEX_DotCrosshair"
+
+        local function CreateCrosshair()
+            -- Hapus GUI lama
+            local old = PlayerGui:FindFirstChild(GUI_NAME)
+            if old then
+                old:Destroy()
+            end
+
+            local gui = Instance.new("ScreenGui")
+            gui.Name = GUI_NAME
+            gui.ResetOnSpawn = false
+            gui.IgnoreGuiInset = true
+            gui.DisplayOrder = 999999
+            gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+            gui.Enabled = true
+            gui.Parent = PlayerGui
+
+            local dot = Instance.new("Frame")
+            dot.Name = "Dot"
+            dot.Size = UDim2.fromOffset(4, 4)
+            dot.AnchorPoint = Vector2.new(0.5, 0.5)
+            dot.Position = UDim2.fromScale(0.5, 0.5)
+
+            dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            dot.BackgroundTransparency = 0
+            dot.BorderSizePixel = 0
+
+            dot.Visible = true
+            dot.ZIndex = 999999
+            dot.Parent = gui
+
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(1, 0)
+            corner.Parent = dot
+
+            return gui, dot
+        end
+
+        local gui, dot = CreateCrosshair()
+
+        --==================================================
+        -- AUTO RECOVERY
+        --==================================================
+
+        local checkTimer = 0
+
+        RunService.RenderStepped:Connect(function(dt)
+
+            checkTimer += dt
+
+            -- Tidak perlu mengecek setiap frame
+            if checkTimer < 0.25 then
+                return
+            end
+
+            checkTimer = 0
+
+            -- GUI hilang
+            if not gui
+                or not gui.Parent
+                or not PlayerGui:FindFirstChild(GUI_NAME) then
+
+                gui, dot = CreateCrosshair()
+                return
+            end
+
+            -- GUI mati
+            if gui.Enabled == false then
+                gui.Enabled = true
+            end
+
+            -- Dot hilang
+            if not dot
+                or not dot.Parent then
+
+                dot = Instance.new("Frame")
+                dot.Name = "Dot"
+                dot.Size = UDim2.fromOffset(4, 4)
+                dot.AnchorPoint = Vector2.new(0.5, 0.5)
+                dot.Position = UDim2.fromScale(0.5, 0.5)
+                dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                dot.BorderSizePixel = 0
+                dot.Visible = true
+                dot.ZIndex = 999999
+                dot.Parent = gui
+
+                local corner = Instance.new("UICorner")
+                corner.CornerRadius = UDim.new(1, 0)
+                corner.Parent = dot
+            end
+
+            -- Pastikan posisi dan visibility tetap benar
+            dot.Visible = true
+            dot.Position = UDim2.fromScale(0.5, 0.5)
+        end)
+
+        --==================================================
+        -- RESPAWN PROTECTION
+        --==================================================
+
+        Player.CharacterAdded:Connect(function()
+
+            task.wait(0.2)
+
+            if not PlayerGui:FindFirstChild(GUI_NAME) then
+                gui, dot = CreateCrosshair()
+            else
+                gui = PlayerGui:FindFirstChild(GUI_NAME)
+                gui.Enabled = true
+
+                dot = gui:FindFirstChild("Dot")
+
+                if dot then
+                    dot.Visible = true
+                end
+            end
+        end)
+
+        -- Jika PlayerGui berubah/di-reset
+        PlayerGui.ChildRemoved:Connect(function(child)
+
+            if child.Name == GUI_NAME then
+                task.wait()
+
+                gui, dot = CreateCrosshair()
+            end
+        end)
+
+        --//=====================================================//
+        --//  END USER CODE - TIDAK DIUBAH SAMA SEKALI           //
+        --//=====================================================//
+
+        ADEX_CrosshairGui = gui
     end
 end)
 
