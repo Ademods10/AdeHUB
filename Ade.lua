@@ -1,23 +1,8 @@
---========================================================--
---                 ADEX MODERN HUB V3.8.1                --
---========================================================--
--- COMPACT • MOBILE • PC • CLAMPED • STABLE              --
--- + CLOSE CONFIRMATION (YES / NO) - CLEAN LAYOUT        --
---========================================================--
-
---========================================================--
--- SERVICES
---========================================================--
-
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 local RunService = game:GetService("RunService")
-
---========================================================--
--- CONFIG
---========================================================--
 
 local CONFIG = {
     Name = "ADEX HUB",
@@ -45,22 +30,29 @@ local CONFIG = {
         SubText = Color3.fromRGB(150, 150, 160),
         Off = Color3.fromRGB(65, 65, 75),
         Danger = Color3.fromRGB(200, 60, 60),
-        DangerDark = Color3.fromRGB(160, 45, 45)
+        DangerDark = Color3.fromRGB(160, 45, 45),
+        Online = Color3.fromRGB(50, 220, 100)
     }
 }
 
---========================================================--
--- REMOVE OLD GUI
---========================================================--
+if _G.ADEX_HubKillers then
+    for _, entry in ipairs(_G.ADEX_HubKillers) do
+        pcall(function()
+            if entry and entry.Disconnect then
+                entry:Disconnect()
+            end
+        end)
+    end
+end
+_G.ADEX_HubKillers = {}
+
+pcall(function() RunService:UnbindFromRenderStep("ADEX_NicknameKiller") end)
+pcall(function() RunService:UnbindFromRenderStep("ADEX_CrosshairKiller") end)
 
 pcall(function()
     local old = CoreGui:FindFirstChild("ADEX_MODERN_HUB")
     if old then old:Destroy() end
 end)
-
---========================================================--
--- PARENT
---========================================================--
 
 local Parent
 pcall(function()
@@ -69,10 +61,6 @@ pcall(function()
     end
 end)
 Parent = Parent or CoreGui
-
---========================================================--
--- HELPERS
---========================================================--
 
 local function Create(className, properties, parent)
     local object = Instance.new(className)
@@ -106,10 +94,6 @@ local function Gradient(object, color1, color2, rotation)
     gradient.Parent = object
     return gradient
 end
-
---========================================================--
--- SAFE TWEEN
---========================================================--
 
 local ActiveTweens = {}
 
@@ -152,10 +136,6 @@ local function Tween(object, duration, properties, style)
     return nil
 end
 
---========================================================--
--- RESPONSIVE SIZE
---========================================================--
-
 local function GetSize()
     local camera = workspace.CurrentCamera
     if not camera then return 320, 400 end
@@ -175,20 +155,12 @@ end
 
 local HubWidth, HubHeight = GetSize()
 
---========================================================--
--- ROOT GUI
---========================================================--
-
 local GUI = Create("ScreenGui", {
     Name = "ADEX_MODERN_HUB",
     ResetOnSpawn = false,
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
     IgnoreGuiInset = true
 }, Parent)
-
---========================================================--
--- VIEWPORT & CLAMP HELPERS
---========================================================--
 
 local function GetViewport()
     local viewport = GUI.AbsoluteSize
@@ -239,10 +211,6 @@ local function ClampInside(target)
     local px, py = GetPixelPosition(target)
     SetPixelPosition(target, px, py)
 end
-
---========================================================--
--- LOADING SCREEN
---========================================================--
 
 local Loader = Create("Frame", {
     Name = "Loader",
@@ -334,10 +302,6 @@ Tween(LoaderVersion, 0.45, { TextTransparency = 0 })
 Tween(LoaderStatus, 0.50, { TextTransparency = 0 })
 Tween(BarBG, 0.50, { BackgroundTransparency = 0 })
 
---========================================================--
--- MAIN
---========================================================--
-
 local Main = Create("Frame", {
     Name = "Main",
     Size = UDim2.fromOffset(HubWidth, HubHeight),
@@ -352,10 +316,6 @@ local Main = Create("Frame", {
 
 Corner(Main, CONFIG.Radius.Outer)
 Stroke(Main)
-
---========================================================--
--- HEADER
---========================================================--
 
 local Header = Create("Frame", {
     Name = "Header",
@@ -419,10 +379,6 @@ Create("TextLabel", {
     ZIndex = 18
 }, Header)
 
---========================================================--
--- MINIMIZE BUTTON
---========================================================--
-
 local MinimizeBtn = Create("TextButton", {
     Name = "Minimize",
     Size = UDim2.fromOffset(30, 27),
@@ -442,10 +398,6 @@ local MinimizeBtn = Create("TextButton", {
 Corner(MinimizeBtn, CONFIG.Radius.Small)
 Stroke(MinimizeBtn, CONFIG.Colors.Border, 1)
 
---========================================================--
--- CLOSE BUTTON
---========================================================--
-
 local CloseBtn = Create("TextButton", {
     Name = "Close",
     Size = UDim2.fromOffset(30, 27),
@@ -464,10 +416,6 @@ local CloseBtn = Create("TextButton", {
 
 Corner(CloseBtn, CONFIG.Radius.Small)
 Stroke(CloseBtn, CONFIG.Colors.Border, 1)
-
---========================================================--
--- FLOATING LOGO
---========================================================--
 
 local FloatingLogo = Create("TextButton", {
     Name = "FloatingLogo",
@@ -543,10 +491,6 @@ end
 FloatingLogoImg:GetPropertyChangedSignal("IsLoaded"):Connect(UpdateLogoFallback)
 task.defer(UpdateLogoFallback)
 
---========================================================--
--- BODY
---========================================================--
-
 local SidebarWidth = UserInputService.TouchEnabled and 100 or 112
 
 local Body = Create("Frame", {
@@ -601,10 +545,6 @@ local PagesHolder = Create("Frame", {
     BackgroundTransparency = 1,
     ZIndex = 2
 }, Content)
-
---========================================================--
--- TAB SYSTEM
---========================================================--
 
 local Tabs = {}
 
@@ -723,10 +663,6 @@ local function CreateTab(name, icon)
     return page
 end
 
---========================================================--
--- COMPONENTS
---========================================================--
-
 local function AddSection(page, text)
     return Create("TextLabel", {
         Size = UDim2.new(1, -3, 0, 21),
@@ -784,6 +720,113 @@ local function AddLabel(page, title, description)
     end
 
     return card
+end
+
+local function AddStatusLabel(page, title)
+    local card = Create("Frame", {
+        Size = UDim2.new(1, -3, 0, 49),
+        BackgroundColor3 = CONFIG.Colors.Card,
+        BorderSizePixel = 0,
+        ZIndex = 2
+    }, page)
+
+    Corner(card, CONFIG.Radius.Card)
+    Stroke(card)
+
+    Create("TextLabel", {
+        Size = UDim2.new(1, -90, 0, 18),
+        Position = UDim2.fromOffset(9, 5),
+        BackgroundTransparency = 1,
+        Text = title,
+        TextColor3 = CONFIG.Colors.Text,
+        Font = Enum.Font.GothamMedium,
+        TextSize = 10,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Active = false,
+        ZIndex = 3
+    }, card)
+
+    local statusText = Create("TextLabel", {
+        Size = UDim2.new(1, -90, 0, 18),
+        Position = UDim2.fromOffset(9, 25),
+        BackgroundTransparency = 1,
+        Text = "Online",
+        TextColor3 = CONFIG.Colors.Online,
+        Font = Enum.Font.GothamBold,
+        TextSize = 10,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Active = false,
+        ZIndex = 3
+    }, card)
+
+    local dot = Create("Frame", {
+        Name = "StatusDot",
+        Size = UDim2.fromOffset(12, 12),
+        Position = UDim2.new(1, -24, 0.5, -6),
+        BackgroundColor3 = CONFIG.Colors.Online,
+        BorderSizePixel = 0,
+        Active = false,
+        ZIndex = 4
+    }, card)
+
+    Corner(dot, 12)
+
+    local ring = Create("Frame", {
+        Name = "StatusRing",
+        Size = UDim2.fromOffset(12, 12),
+        Position = UDim2.fromOffset(0, 0),
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Active = false,
+        ZIndex = 3
+    }, dot)
+
+    ring.Position = UDim2.fromScale(0.5, 0.5)
+    Corner(ring, 12)
+
+    local ringStroke = Instance.new("UIStroke")
+    ringStroke.Color = CONFIG.Colors.Online
+    ringStroke.Thickness = 1
+    ringStroke.Transparency = 0.5
+    ringStroke.Parent = ring
+
+    local pulseConnection
+    pulseConnection = RunService.Heartbeat:Connect(function()
+        if not card or not card.Parent then
+            if pulseConnection then
+                pulseConnection:Disconnect()
+                pulseConnection = nil
+            end
+            return
+        end
+
+        local t = tick() % 1.5
+        local progress = t / 1.5
+
+        local size = 12 + (progress * 12)
+        ring.Size = UDim2.fromOffset(size, size)
+        ringStroke.Transparency = 0.3 + (progress * 0.7)
+    end)
+
+    return {
+        Card = card,
+        Text = statusText,
+        Dot = dot,
+        SetStatus = function(isOnline)
+            if isOnline then
+                statusText.Text = "Online"
+                statusText.TextColor3 = CONFIG.Colors.Online
+                dot.BackgroundColor3 = CONFIG.Colors.Online
+                ringStroke.Color = CONFIG.Colors.Online
+            else
+                statusText.Text = "Offline"
+                statusText.TextColor3 = CONFIG.Colors.Danger
+                dot.BackgroundColor3 = CONFIG.Colors.Danger
+                ringStroke.Color = CONFIG.Colors.Danger
+            end
+        end
+    }
 end
 
 local function AddButton(page, title, description, callback)
@@ -975,64 +1018,54 @@ local function AddToggle(page, title, description, default, callback)
     }
 end
 
---========================================================--
--- CREATE TABS
---========================================================--
+local ADEX_CleanupFunctions = {}
+
+local function ADEX_RegisterCleanup(fn)
+    if type(fn) == "function" then
+        table.insert(ADEX_CleanupFunctions, fn)
+    end
+end
+
+local function ADEX_AddKiller(conn)
+    if conn then
+        table.insert(_G.ADEX_HubKillers, conn)
+    end
+    return conn
+end
+
+local function ADEX_RunAllCleanups()
+    for _, fn in ipairs(ADEX_CleanupFunctions) do
+        pcall(fn)
+    end
+    ADEX_CleanupFunctions = {}
+end
 
 local Home = CreateTab("Home", "⌂")
 local Visuals = CreateTab("Visuals", "◉")
 local PlayerTab = CreateTab("Player", "●")
 local Settings = CreateTab("Settings", "⚙")
 
---========================================================--
--- HOME CONTENT
---========================================================--
-
 AddSection(Home, "WELCOME")
 AddLabel(Home, "ADEX MODERN HUB", "Compact • Responsive • Android + PC")
-AddLabel(Home, "Status", "UI berhasil dimuat.")
 
-AddSection(Home, "EXAMPLE")
-AddButton(Home, "Example Button", "Contoh tombol fitur.", function()
-    print("[ADEX] Button clicked")
-end)
-
-AddToggle(Home, "Example Toggle", "Contoh toggle.", false, function(value)
-    print("[ADEX] Toggle:", value)
-end)
-
---========================================================--
--- VISUALS CONTENT
---========================================================--
+AddSection(Home, "STATUS SCRIPT")
+local StatusCard = AddStatusLabel(Home, "Script Status")
+StatusCard.SetStatus(true)
 
 AddSection(Visuals, "VISUAL FEATURES")
 AddButton(Visuals, "Refresh", "Refresh fitur.", function()
     print("Refresh")
 end)
 
---========================================================--
--- ESP BODY (User Code - Unchanged)
---========================================================--
-
 local ADEX_EspBodyLoaded = false
 local ADEX_EspBodyEnabled = false
+local ADEX_EspBodyToggle = nil
 
-AddSection(Visuals, "ESP BODY")
-
-AddToggle(Visuals, "Esp Body", "Killer (Merah) / Survivor (Biru).", false, function(enabled)
+ADEX_EspBodyToggle = AddToggle(Visuals, "Esp Body", "Killer (Merah) / Survivor (Biru).", false, function(enabled)
     ADEX_EspBodyEnabled = enabled
 
     if enabled and not ADEX_EspBodyLoaded then
         ADEX_EspBodyLoaded = true
-
-        --//=====================================================//
-        --//  USER CODE ESP BODY - TIDAK DIUBAH SAMA SEKALI      //
-        --//=====================================================//
-
-        --// ADEX BODY ESP
-        --// ROLE DETECTION
-        --// Killer   = RED
-        --// Survivor = BLUE
 
         local Players = game:GetService("Players")
         local LocalPlayer = Players.LocalPlayer
@@ -1080,7 +1113,6 @@ AddToggle(Visuals, "Esp Body", "Killer (Merah) / Survivor (Biru).", false, funct
         end
 
         local function GetRole(player)
-            -- 1. Team
             if player.Team then
                 local role = NormalizeRole(player.Team.Name)
                 if role then
@@ -1088,7 +1120,6 @@ AddToggle(Visuals, "Esp Body", "Killer (Merah) / Survivor (Biru).", false, funct
                 end
             end
 
-            -- 2. Attribute Role
             local attributeRole = player:GetAttribute("Role")
             local role = NormalizeRole(attributeRole)
 
@@ -1096,7 +1127,6 @@ AddToggle(Visuals, "Esp Body", "Killer (Merah) / Survivor (Biru).", false, funct
                 return role
             end
 
-            -- 3. Role langsung di Player
             local roleObject = player:FindFirstChild("Role")
             role = NormalizeRole(ReadValue(roleObject))
 
@@ -1104,7 +1134,6 @@ AddToggle(Visuals, "Esp Body", "Killer (Merah) / Survivor (Biru).", false, funct
                 return role
             end
 
-            -- 4. Leaderstats
             local leaderstats = player:FindFirstChild("leaderstats")
 
             if leaderstats then
@@ -1117,7 +1146,6 @@ AddToggle(Visuals, "Esp Body", "Killer (Merah) / Survivor (Biru).", false, funct
                 end
             end
 
-            -- 5. Character
             local character = player.Character
 
             if character then
@@ -1129,7 +1157,6 @@ AddToggle(Visuals, "Esp Body", "Killer (Merah) / Survivor (Biru).", false, funct
                     return role
                 end
 
-                -- Attribute Character
                 role = NormalizeRole(character:GetAttribute("Role"))
 
                 if role then
@@ -1174,7 +1201,6 @@ AddToggle(Visuals, "Esp Body", "Killer (Merah) / Survivor (Biru).", false, funct
             esp.FillColor = color
             esp.OutlineColor = color
 
-            -- Simpan role agar mudah dicek
             esp:SetAttribute("DetectedRole", role)
         end
 
@@ -1214,13 +1240,7 @@ AddToggle(Visuals, "Esp Body", "Killer (Merah) / Survivor (Biru).", false, funct
 
         Players.PlayerAdded:Connect(SetupPlayer)
 
-        --//=====================================================//
-        --//  END USER CODE - TIDAK DIUBAH SAMA SEKALI           //
-        --//=====================================================//
-
-        -- State applier eksternal (untuk fungsi ON/OFF toggle)
-        -- TIDAK menyentuh code user di atas
-        RunService.Heartbeat:Connect(function()
+        ADEX_AddKiller(RunService.Heartbeat:Connect(function()
             local fill = ADEX_EspBodyEnabled and 0.55 or 1
             local outline = ADEX_EspBodyEnabled and 0 or 1
 
@@ -1233,34 +1253,34 @@ AddToggle(Visuals, "Esp Body", "Killer (Merah) / Survivor (Biru).", false, funct
                     end
                 end
             end
+        end))
+
+        ADEX_RegisterCleanup(function()
+            if ADEX_EspBodyToggle then ADEX_EspBodyToggle.Set(false) end
+            ADEX_EspBodyEnabled = false
+
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p.Character then
+                    local esp = p.Character:FindFirstChild("ADEX_BodyESP")
+                    if esp then
+                        pcall(function() esp:Destroy() end)
+                    end
+                end
+            end
         end)
     end
 end)
 
---========================================================--
--- CROSSHAIR V2 (User Code - Unchanged)
---========================================================--
-
 local ADEX_CrosshairLoaded = false
 local ADEX_CrosshairEnabled = false
 local ADEX_CrosshairGui = nil
-local ADEX_CrosshairAutoGuard = nil
+local ADEX_CrosshairToggle = nil
 
-AddSection(Visuals, "CROSSHAIR")
-
-AddToggle(Visuals, "Crosshair", "Titik crosshair di tengah layar.", false, function(enabled)
+ADEX_CrosshairToggle = AddToggle(Visuals, "Crosshair", "Titik crosshair di tengah layar.", false, function(enabled)
     ADEX_CrosshairEnabled = enabled
 
     if enabled and not ADEX_CrosshairLoaded then
         ADEX_CrosshairLoaded = true
-
-        --//=====================================================//
-        --//  USER CODE CROSSHAIR V2 - TIDAK DIUBAH SAMA SEKALI  //
-        --//=====================================================//
-
-        --// ADEX DOT CROSSHAIR V2
-        --// LocalScript
-        --// StarterPlayer > StarterPlayerScripts
 
         local Players = game:GetService("Players")
         local RunService = game:GetService("RunService")
@@ -1271,7 +1291,6 @@ AddToggle(Visuals, "Crosshair", "Titik crosshair di tengah layar.", false, funct
         local GUI_NAME = "ADEX_DotCrosshair"
 
         local function CreateCrosshair()
-            -- Hapus GUI lama
             local old = PlayerGui:FindFirstChild(GUI_NAME)
             if old then
                 old:Destroy()
@@ -1309,24 +1328,18 @@ AddToggle(Visuals, "Crosshair", "Titik crosshair di tengah layar.", false, funct
 
         local gui, dot = CreateCrosshair()
 
-        --==================================================
-        -- AUTO RECOVERY
-        --==================================================
-
         local checkTimer = 0
 
         RunService.RenderStepped:Connect(function(dt)
 
             checkTimer += dt
 
-            -- Tidak perlu mengecek setiap frame
             if checkTimer < 0.25 then
                 return
             end
 
             checkTimer = 0
 
-            -- GUI hilang
             if not gui
                 or not gui.Parent
                 or not PlayerGui:FindFirstChild(GUI_NAME) then
@@ -1335,12 +1348,10 @@ AddToggle(Visuals, "Crosshair", "Titik crosshair di tengah layar.", false, funct
                 return
             end
 
-            -- GUI mati
             if gui.Enabled == false then
                 gui.Enabled = true
             end
 
-            -- Dot hilang
             if not dot
                 or not dot.Parent then
 
@@ -1360,14 +1371,9 @@ AddToggle(Visuals, "Crosshair", "Titik crosshair di tengah layar.", false, funct
                 corner.Parent = dot
             end
 
-            -- Pastikan posisi dan visibility tetap benar
             dot.Visible = true
             dot.Position = UDim2.fromScale(0.5, 0.5)
         end)
-
-        --==================================================
-        -- RESPAWN PROTECTION
-        --==================================================
 
         Player.CharacterAdded:Connect(function()
 
@@ -1387,7 +1393,6 @@ AddToggle(Visuals, "Crosshair", "Titik crosshair di tengah layar.", false, funct
             end
         end)
 
-        -- Jika PlayerGui berubah/di-reset
         PlayerGui.ChildRemoved:Connect(function(child)
 
             if child.Name == GUI_NAME then
@@ -1397,17 +1402,425 @@ AddToggle(Visuals, "Crosshair", "Titik crosshair di tengah layar.", false, funct
             end
         end)
 
-        --//=====================================================//
-        --//  END USER CODE - TIDAK DIUBAH SAMA SEKALI           //
-        --//=====================================================//
-
         ADEX_CrosshairGui = gui
+
+        ADEX_RegisterCleanup(function()
+            if ADEX_CrosshairToggle then ADEX_CrosshairToggle.Set(false) end
+            ADEX_CrosshairEnabled = false
+
+            pcall(function()
+                local lp = game:GetService("Players").LocalPlayer
+                if not lp then return end
+                local pgui = lp:FindFirstChildOfClass("PlayerGui")
+                if not pgui then return end
+                local g = pgui:FindFirstChild("ADEX_DotCrosshair")
+                if not g then return end
+                local d = g:FindFirstChild("Dot")
+                if d then
+                    d.BackgroundTransparency = 1
+                    d.Visible = false
+                end
+                g.Enabled = false
+            end)
+
+            pcall(function()
+                RunService:UnbindFromRenderStep("ADEX_CrosshairKiller")
+            end)
+            pcall(function()
+                RunService:BindToRenderStep("ADEX_CrosshairKiller", Enum.RenderPriority.Last.Value, function()
+                    local lp = game:GetService("Players").LocalPlayer
+                    if not lp then return end
+                    local pgui = lp:FindFirstChildOfClass("PlayerGui")
+                    if not pgui then return end
+                    local g = pgui:FindFirstChild("ADEX_DotCrosshair")
+                    if not g then return end
+                    local d = g:FindFirstChild("Dot")
+                    if d then
+                        if d.BackgroundTransparency < 1 then
+                            d.BackgroundTransparency = 1
+                        end
+                        if d.Visible then
+                            d.Visible = false
+                        end
+                    end
+                end)
+            end)
+        end)
     end
 end)
 
---========================================================--
--- PLAYER CONTENT
---========================================================--
+local ADEX_NicknameLoaded = false
+local ADEX_NicknameEnabled = false
+local ADEX_NicknameToggle = nil
+
+ADEX_NicknameToggle = AddToggle(Visuals, "Esp Nickname", "Nama pemain • Small • Clean • Distance.", false, function(enabled)
+    ADEX_NicknameEnabled = enabled
+
+    if enabled and not ADEX_NicknameLoaded then
+        ADEX_NicknameLoaded = true
+
+        local Players = game:GetService("Players")
+        local LocalPlayer = Players.LocalPlayer
+
+        local MAX_DISTANCE = 1000
+
+        local function CreateNicknameESP(player)
+
+            if player == LocalPlayer then
+                return
+            end
+
+            local function Setup(character)
+
+                local head = character:WaitForChild("Head", 5)
+
+                if not head then
+                    return
+                end
+
+                local old = head:FindFirstChild("ADEX_NicknameESP")
+
+                if old then
+                    old:Destroy()
+                end
+
+                local billboard = Instance.new("BillboardGui")
+
+                billboard.Name = "ADEX_NicknameESP"
+                billboard.Adornee = head
+
+                billboard.Size = UDim2.fromOffset(120, 22)
+
+                billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+
+                billboard.AlwaysOnTop = true
+                billboard.MaxDistance = MAX_DISTANCE
+
+                billboard.Parent = head
+
+                local label = Instance.new("TextLabel")
+
+                label.Name = "Nickname"
+
+                label.Size = UDim2.fromScale(1, 1)
+
+                label.BackgroundTransparency = 1
+
+                label.Text = player.DisplayName
+
+                label.TextSize = 13
+
+                label.Font = Enum.Font.GothamMedium
+
+                label.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+                label.TextStrokeTransparency = 0.25
+                label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+
+                label.TextXAlignment = Enum.TextXAlignment.Center
+                label.TextYAlignment = Enum.TextYAlignment.Center
+
+                label.Parent = billboard
+            end
+
+            if player.Character then
+                Setup(player.Character)
+            end
+
+            player.CharacterAdded:Connect(function(character)
+                Setup(character)
+            end)
+        end
+
+        for _, player in ipairs(Players:GetPlayers()) do
+            CreateNicknameESP(player)
+        end
+
+        Players.PlayerAdded:Connect(function(player)
+            CreateNicknameESP(player)
+        end)
+
+        pcall(function()
+            RunService:UnbindFromRenderStep("ADEX_NicknameKiller")
+        end)
+        pcall(function()
+            RunService:BindToRenderStep("ADEX_NicknameKiller", Enum.RenderPriority.Last.Value, function()
+                if ADEX_NicknameEnabled then
+                    return
+                end
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if p.Character then
+                        local head = p.Character:FindFirstChild("Head")
+                        if head then
+                            local billboard = head:FindFirstChild("ADEX_NicknameESP")
+                            if billboard and billboard.Enabled then
+                                billboard.Enabled = false
+                            end
+                        end
+                    end
+                end
+            end)
+        end)
+
+        ADEX_RegisterCleanup(function()
+            if ADEX_NicknameToggle then ADEX_NicknameToggle.Set(false) end
+            ADEX_NicknameEnabled = false
+
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p.Character then
+                    local head = p.Character:FindFirstChild("Head")
+                    if head then
+                        local bb = head:FindFirstChild("ADEX_NicknameESP")
+                        if bb then
+                            pcall(function() bb:Destroy() end)
+                        end
+                    end
+                end
+            end
+        end)
+    end
+end)
+
+local ADEX_GeneratorLoaded = false
+local ADEX_GeneratorEnabled = false
+local ADEX_GeneratorToggle = nil
+
+ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • Persentase generator.", false, function(enabled)
+    ADEX_GeneratorEnabled = enabled
+
+    if enabled and not ADEX_GeneratorLoaded then
+        ADEX_GeneratorLoaded = true
+
+        local Workspace = game:GetService("Workspace")
+
+        local MAX_DISTANCE = 1000
+        local VALUE_NAME = "RepairProgress"
+
+        local PERCENT_TEXT_SIZE = 14
+
+        local PERCENT_HEIGHT = 4
+
+        local function FormatPercent(value)
+            value = tonumber(value)
+
+            if not value then
+                return nil
+            end
+
+            return math.clamp(math.floor(value + 0.5), 0, 100)
+        end
+
+        local function GetPart(generator)
+
+            if generator:IsA("BasePart") then
+                return generator
+            end
+
+            if generator:IsA("Model") then
+                return generator.PrimaryPart
+                    or generator:FindFirstChildWhichIsA("BasePart", true)
+            end
+
+            return nil
+        end
+
+        local function FindRepairProgress(generator)
+
+            local value = generator:FindFirstChild(VALUE_NAME, true)
+
+            if value and value:IsA("ValueBase") then
+                return value, "Value"
+            end
+
+            if generator:GetAttribute(VALUE_NAME) ~= nil then
+                return generator, "Attribute"
+            end
+
+            for _, object in ipairs(generator:GetDescendants()) do
+
+                if object:GetAttribute(VALUE_NAME) ~= nil then
+                    return object, "Attribute"
+                end
+
+            end
+
+            return nil
+        end
+
+        local function CreateESP(generator)
+
+            local part = GetPart(generator)
+
+            if not part then
+                return
+            end
+
+            if part:FindFirstChild("ADEX_GeneratorESP") then
+                return
+            end
+
+            local progress, source = FindRepairProgress(generator)
+
+            if not progress then
+                return
+            end
+
+            local highlight = Instance.new("Highlight")
+
+            highlight.Name = "ADEX_GeneratorESP"
+            highlight.Adornee = generator
+
+            highlight.FillColor = Color3.fromRGB(255, 190, 0)
+            highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+
+            highlight.FillTransparency = 0.55
+            highlight.OutlineTransparency = 0
+
+            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+
+            highlight.Parent = part
+
+            local billboard = Instance.new("BillboardGui")
+
+            billboard.Name = "ADEX_GeneratorPercent"
+            billboard.Adornee = part
+
+            billboard.Size = UDim2.fromOffset(120, 25)
+
+            billboard.StudsOffset = Vector3.new(0, PERCENT_HEIGHT, 0)
+
+            billboard.AlwaysOnTop = true
+            billboard.MaxDistance = MAX_DISTANCE
+
+            billboard.Parent = part
+
+            local label = Instance.new("TextLabel")
+
+            label.Name = "Percentage"
+
+            label.Size = UDim2.fromScale(1, 1)
+
+            label.BackgroundTransparency = 1
+
+            label.Text = "0%"
+
+            label.TextSize = PERCENT_TEXT_SIZE
+
+            label.Font = Enum.Font.GothamBold
+
+            label.TextColor3 = Color3.fromRGB(255, 80, 70)
+
+            label.TextStrokeTransparency = 0
+            label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+
+            label.TextXAlignment = Enum.TextXAlignment.Center
+            label.TextYAlignment = Enum.TextYAlignment.Center
+
+            label.Parent = billboard
+
+            local function Update()
+
+                local rawValue
+
+                if source == "Value" then
+                    rawValue = progress.Value
+                else
+                    rawValue = progress:GetAttribute(VALUE_NAME)
+                end
+
+                local percent = FormatPercent(rawValue)
+
+                if percent == nil then
+                    label.Text = "0%"
+                    return
+                end
+
+                label.Text = percent .. "%"
+
+                if percent >= 100 then
+
+                    label.TextColor3 = Color3.fromRGB(
+                        50, 255, 100
+                    )
+
+                elseif percent >= 50 then
+
+                    label.TextColor3 = Color3.fromRGB(
+                        255, 220, 50
+                    )
+
+                else
+
+                    label.TextColor3 = Color3.fromRGB(
+                        255, 80, 70
+                    )
+
+                end
+            end
+
+            Update()
+
+            if source == "Value" then
+
+                progress:GetPropertyChangedSignal("Value"):Connect(Update)
+
+            else
+
+                progress:GetAttributeChangedSignal(VALUE_NAME):Connect(Update)
+
+            end
+        end
+
+        for _, object in ipairs(Workspace:GetDescendants()) do
+
+            if object.Name == "Generator" then
+                CreateESP(object)
+            end
+
+        end
+
+        Workspace.DescendantAdded:Connect(function(object)
+
+            if object.Name == "Generator" then
+
+                task.wait(0.2)
+
+                CreateESP(object)
+
+            end
+
+        end)
+
+        pcall(function()
+            RunService:UnbindFromRenderStep("ADEX_GeneratorKiller")
+        end)
+        pcall(function()
+            RunService:BindToRenderStep("ADEX_GeneratorKiller", Enum.RenderPriority.Last.Value, function()
+                if ADEX_GeneratorEnabled then
+                    return
+                end
+                for _, obj in ipairs(Workspace:GetDescendants()) do
+                    if obj.Name == "ADEX_GeneratorESP" or obj.Name == "ADEX_GeneratorPercent" then
+                        if obj:IsA("Highlight") or obj:IsA("BillboardGui") then
+                            obj.Enabled = false
+                        end
+                    end
+                end
+            end)
+        end)
+
+        ADEX_RegisterCleanup(function()
+            if ADEX_GeneratorToggle then ADEX_GeneratorToggle.Set(false) end
+            ADEX_GeneratorEnabled = false
+
+            for _, obj in ipairs(Workspace:GetDescendants()) do
+                if obj.Name == "ADEX_GeneratorESP" or obj.Name == "ADEX_GeneratorPercent" then
+                    pcall(function() obj:Destroy() end)
+                end
+            end
+        end)
+    end
+end)
 
 AddSection(PlayerTab, "PLAYER FEATURES")
 AddToggle(PlayerTab, "Feature A", "Tempat fitur player.", false, function(v)
@@ -1416,10 +1829,6 @@ end)
 AddToggle(PlayerTab, "Feature B", "Fitur player lainnya.", false, function(v)
     print("Feature B:", v)
 end)
-
---========================================================--
--- SETTINGS CONTENT
---========================================================--
 
 AddSection(Settings, "INTERFACE")
 AddButton(Settings, "Reset Position", "Kembalikan UI ke tengah.", function()
@@ -1431,10 +1840,6 @@ AddButton(Settings, "Reset Position", "Kembalikan UI ke tengah.", function()
 end)
 
 AddLabel(Settings, "Keybind", "RightShift = Minimize / Restore")
-
---========================================================--
--- CLOSE CONFIRMATION DIALOG
---========================================================--
 
 local Modal = Create("Frame", {
     Name = "ConfirmModal",
@@ -1460,7 +1865,6 @@ local ModalCard = Create("Frame", {
 Corner(ModalCard, CONFIG.Radius.Outer)
 Stroke(ModalCard, CONFIG.Colors.Border, 1)
 
--- Top danger accent strip
 Create("Frame", {
     Name = "AccentStrip",
     Size = UDim2.new(1, 0, 0, 3),
@@ -1469,7 +1873,6 @@ Create("Frame", {
     ZIndex = 202
 }, ModalCard)
 
--- Warning icon
 local IconCircle = Create("Frame", {
     Name = "Icon",
     Size = UDim2.fromOffset(34, 34),
@@ -1491,7 +1894,6 @@ Create("TextLabel", {
     ZIndex = 203
 }, IconCircle)
 
--- Title
 Create("TextLabel", {
     Name = "Title",
     Size = UDim2.new(1, -80, 0, 20),
@@ -1505,7 +1907,6 @@ Create("TextLabel", {
     ZIndex = 203
 }, ModalCard)
 
--- Subtitle
 Create("TextLabel", {
     Name = "Subtitle",
     Size = UDim2.new(1, -80, 0, 14),
@@ -1519,7 +1920,6 @@ Create("TextLabel", {
     ZIndex = 203
 }, ModalCard)
 
--- Divider
 Create("Frame", {
     Name = "Divider",
     Size = UDim2.new(1, -32, 0, 1),
@@ -1529,7 +1929,6 @@ Create("Frame", {
     ZIndex = 202
 }, ModalCard)
 
--- Message
 Create("TextLabel", {
     Name = "Message",
     Size = UDim2.new(1, -32, 0, 36),
@@ -1545,7 +1944,6 @@ Create("TextLabel", {
     ZIndex = 203
 }, ModalCard)
 
--- Button row container
 local ButtonRow = Create("Frame", {
     Name = "ButtonRow",
     Size = UDim2.new(1, -32, 0, 38),
@@ -1580,7 +1978,6 @@ local function MakeModalButton(text, bgColor)
     Corner(btn, CONFIG.Radius.Small)
     Stroke(btn, CONFIG.Colors.Border, 1)
 
-    -- Press effect
     btn.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
         or input.UserInputType == Enum.UserInputType.Touch then
@@ -1641,7 +2038,6 @@ local function CloseModal(thenDestroy)
     end)
 end
 
--- Click outside card = cancel
 Modal.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
     or input.UserInputType == Enum.UserInputType.Touch then
@@ -1657,16 +2053,27 @@ NoBtn.Activated:Connect(function()
     CloseModal(false)
 end)
 
---========================================================--
--- DRAG SYSTEM
---========================================================--
-
 local dragging = false
 local dragTarget = nil
 local dragStart = nil
 local dragStartX = 0
 local dragStartY = 0
 local movedDistance = 0
+
+local LastLogoPosition = nil
+local LastMainPosition = nil
+
+local function SaveMainPosition()
+    if not Main or not Main.Parent then return end
+    local px, py = GetPixelPosition(Main)
+    LastMainPosition = Vector2.new(px, py)
+end
+
+local function SaveLogoPosition()
+    if not FloatingLogo or not FloatingLogo.Parent then return end
+    local px, py = GetPixelPosition(FloatingLogo)
+    LastLogoPosition = Vector2.new(px, py)
+end
 
 local function BeginDrag(target, input)
     if not target or not target.Parent then return end
@@ -1695,14 +2102,16 @@ local function UpdateDrag(input)
 end
 
 local function EndDrag()
+    if dragTarget == Main then
+        SaveMainPosition()
+    elseif dragTarget == FloatingLogo then
+        SaveLogoPosition()
+    end
+
     dragging = false
     dragTarget = nil
     dragStart = nil
 end
-
---========================================================--
--- MINIMIZE / RESTORE
---========================================================--
 
 local minimized = false
 local minimizeBusy = false
@@ -1716,9 +2125,16 @@ local function MinimizeMenu()
 
     minimized = true
 
-    local px, py = GetPixelPosition(Main)
+    SaveMainPosition()
+
+    local targetPos = LastLogoPosition
+    if not targetPos then
+        local mpx, mpy = GetPixelPosition(Main)
+        targetPos = Vector2.new(mpx, mpy)
+    end
+
     local logoSize = Vector2.new(52, 52)
-    local cx, cy = ClampPixel(px, py, logoSize, FloatingLogo.AnchorPoint)
+    local cx, cy = ClampPixel(targetPos.X, targetPos.Y, logoSize, FloatingLogo.AnchorPoint)
 
     FloatingLogo.Position = UDim2.fromOffset(cx, cy)
     FloatingLogo.Size = UDim2.fromOffset(52, 52)
@@ -1744,11 +2160,17 @@ local function RestoreMenu()
 
     minimized = false
 
-    local px, py = GetPixelPosition(FloatingLogo)
+    SaveLogoPosition()
+
+    local targetPos = LastMainPosition
+    if not targetPos then
+        local lpx, lpy = GetPixelPosition(FloatingLogo)
+        targetPos = Vector2.new(lpx, lpy)
+    end
 
     local mainSizeUDim = UDim2.fromOffset(HubWidth, HubHeight)
     local mainSizeVec = Vector2.new(HubWidth, HubHeight)
-    local cx, cy = ClampPixel(px, py, mainSizeVec, Main.AnchorPoint)
+    local cx, cy = ClampPixel(targetPos.X, targetPos.Y, mainSizeVec, Main.AnchorPoint)
 
     Main.Size = UDim2.fromOffset(0, 0)
     Main.Position = UDim2.fromOffset(cx, cy)
@@ -1776,10 +2198,6 @@ local function RestoreMenu()
         end
     end)
 end
-
---========================================================--
--- INPUT BINDINGS
---========================================================--
 
 DragZone.InputBegan:Connect(function(input)
     if input.UserInputType ~= Enum.UserInputType.MouseButton1
@@ -1867,7 +2285,6 @@ end)
 UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
 
-    -- ESC = tutup modal
     if input.KeyCode == Enum.KeyCode.Escape and modalOpen then
         CloseModal(false)
         return
@@ -1875,7 +2292,6 @@ UserInputService.InputBegan:Connect(function(input, processed)
 
     if input.KeyCode ~= CONFIG.Key then return end
 
-    -- Tidak boleh toggle minimize saat modal terbuka
     if modalOpen then return end
 
     if minimized then
@@ -1884,10 +2300,6 @@ UserInputService.InputBegan:Connect(function(input, processed)
         MinimizeMenu()
     end
 end)
-
---========================================================--
--- CAMERA SYSTEM
---========================================================--
 
 local CameraConnection = nil
 local CameraWatcher = nil
@@ -1910,12 +2322,34 @@ local function ConnectCamera(camera)
         HubHeight = height
 
         if minimized then
-            ClampInside(FloatingLogo)
+            if LastLogoPosition then
+                local logoSize = Vector2.new(52, 52)
+                local cx, cy = ClampPixel(
+                    LastLogoPosition.X,
+                    LastLogoPosition.Y,
+                    logoSize,
+                    FloatingLogo.AnchorPoint
+                )
+                FloatingLogo.Position = UDim2.fromOffset(cx, cy)
+            else
+                ClampInside(FloatingLogo)
+            end
         elseif Main and Main.Parent then
             Main.Size = UDim2.fromOffset(width, height)
             task.defer(function()
                 if Main and Main.Parent then
-                    ClampInside(Main)
+                    if LastMainPosition then
+                        local mainSize = Vector2.new(width, height)
+                        local cx, cy = ClampPixel(
+                            LastMainPosition.X,
+                            LastMainPosition.Y,
+                            mainSize,
+                            Main.AnchorPoint
+                        )
+                        Main.Position = UDim2.fromOffset(cx, cy)
+                    else
+                        ClampInside(Main)
+                    end
                 end
             end)
         end
@@ -1932,15 +2366,7 @@ CameraWatcher = workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(func
     end
 end)
 
---========================================================--
--- INITIAL TAB
---========================================================--
-
 SelectTab("Home")
-
---========================================================--
--- LOADING ANIMATION
---========================================================--
 
 local LoadingSteps = {
     { text = "Initializing core...", at = 0.15 },
@@ -2021,10 +2447,6 @@ LoadingConnection = RunService.RenderStepped:Connect(function()
     end
 end)
 
---========================================================--
--- CLEANUP
---========================================================--
-
 GUI.Destroying:Connect(function()
     if LoadingConnection then
         LoadingConnection:Disconnect()
@@ -2046,4 +2468,12 @@ GUI.Destroying:Connect(function()
     for obj in pairs(ActiveTweens) do
         ActiveTweens[obj] = nil
     end
+
+    pcall(function()
+        if StatusCard and StatusCard.SetStatus then
+            StatusCard.SetStatus(false)
+        end
+    end)
+
+    pcall(ADEX_RunAllCleanups)
 end)
