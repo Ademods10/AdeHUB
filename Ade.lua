@@ -31,7 +31,8 @@ local CONFIG = {
         Off = Color3.fromRGB(65, 65, 75),
         Danger = Color3.fromRGB(200, 60, 60),
         DangerDark = Color3.fromRGB(160, 45, 45),
-        Online = Color3.fromRGB(50, 220, 100)
+        Online = Color3.fromRGB(50, 220, 100),
+        Success = Color3.fromRGB(60, 210, 120)
     }
 }
 
@@ -48,6 +49,8 @@ _G.ADEX_HubKillers = {}
 
 pcall(function() RunService:UnbindFromRenderStep("ADEX_NicknameKiller") end)
 pcall(function() RunService:UnbindFromRenderStep("ADEX_CrosshairKiller") end)
+pcall(function() RunService:UnbindFromRenderStep("ADEX_GeneratorKiller") end)
+pcall(function() RunService:UnbindFromRenderStep("ADEX_AutoGenKiller") end)
 
 pcall(function()
     local old = CoreGui:FindFirstChild("ADEX_MODERN_HUB")
@@ -846,7 +849,7 @@ local function AddButton(page, title, description, callback)
     Corner(button, CONFIG.Radius.Card)
     Stroke(button)
 
-    Create("TextLabel", {
+    local titleLabel = Create("TextLabel", {
         Size = UDim2.new(1, -50, 0, 18),
         Position = UDim2.fromOffset(10, description and 5 or 10),
         BackgroundTransparency = 1,
@@ -909,10 +912,18 @@ local function AddButton(page, title, description, callback)
         end
     end)
 
-    return button
+    return {
+        Button = button,
+        Label = titleLabel,
+        SetText = function(newText)
+            titleLabel.Text = newText
+        end
+    }
 end
 
-local function AddToggle(page, title, description, default, callback)
+local ToggleRegistry = {}
+
+local function AddToggle(page, title, description, default, callback, noRegister)
     local state = default == true
     local height = description and 51 or 38
 
@@ -1011,9 +1022,117 @@ local function AddToggle(page, title, description, default, callback)
         Set(not state)
     end)
 
-    return {
+    local toggleObj = {
         Set = Set,
         Get = function() return state end,
+        Frame = card
+    }
+
+    if not noRegister then
+        ToggleRegistry[title] = toggleObj
+    end
+
+    return toggleObj
+end
+
+local function AddTextBox(page, title, description, placeholder, default, callback)
+    local hasDesc = description ~= nil
+    local height = hasDesc and 78 or 64
+
+    local card = Create("Frame", {
+        Size = UDim2.new(1, -3, 0, height),
+        BackgroundColor3 = CONFIG.Colors.Card,
+        BorderSizePixel = 0,
+        ZIndex = 2
+    }, page)
+
+    Corner(card, CONFIG.Radius.Card)
+    Stroke(card)
+
+    Create("TextLabel", {
+        Size = UDim2.new(1, -18, 0, 18),
+        Position = UDim2.fromOffset(10, 5),
+        BackgroundTransparency = 1,
+        Text = title,
+        TextColor3 = CONFIG.Colors.Text,
+        Font = Enum.Font.GothamMedium,
+        TextSize = 10,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Active = false,
+        ZIndex = 3
+    }, card)
+
+    if hasDesc then
+        Create("TextLabel", {
+            Size = UDim2.new(1, -18, 0, 14),
+            Position = UDim2.fromOffset(10, 24),
+            BackgroundTransparency = 1,
+            Text = description,
+            TextColor3 = CONFIG.Colors.SubText,
+            Font = Enum.Font.Gotham,
+            TextSize = 8,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Active = false,
+            ZIndex = 3
+        }, card)
+    end
+
+    local boxY = hasDesc and 42 or 27
+
+    local box = Create("TextBox", {
+        Size = UDim2.new(1, -20, 0, 28),
+        Position = UDim2.fromOffset(10, boxY),
+        BackgroundColor3 = CONFIG.Colors.Secondary,
+        BorderSizePixel = 0,
+        Text = default or "",
+        PlaceholderText = placeholder or "Enter...",
+        TextColor3 = CONFIG.Colors.Text,
+        PlaceholderColor3 = CONFIG.Colors.SubText,
+        Font = Enum.Font.Gotham,
+        TextSize = 10,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ClearTextOnFocus = false,
+        ZIndex = 4
+    }, card)
+
+    Corner(box, CONFIG.Radius.Small)
+    Stroke(box, CONFIG.Colors.Border, 1)
+
+    Create("UIPadding", {
+        PaddingLeft = UDim.new(0, 8),
+        PaddingRight = UDim.new(0, 8)
+    }, box)
+
+    box.Focused:Connect(function()
+        Tween(box, 0.15, {
+            BackgroundColor3 = CONFIG.Colors.Background
+        })
+        Tween(box, 0.15, {
+            TextColor3 = CONFIG.Colors.Accent
+        })
+    end)
+
+    box.FocusLost:Connect(function()
+        Tween(box, 0.15, {
+            BackgroundColor3 = CONFIG.Colors.Secondary
+        })
+        Tween(box, 0.15, {
+            TextColor3 = CONFIG.Colors.Text
+        })
+        if callback then
+            task.spawn(function()
+                local ok, err = pcall(callback, box.Text)
+                if not ok then
+                    warn("[ADEX] TextBox error:", err)
+                end
+            end)
+        end
+    end)
+
+    return {
+        Get = function() return box.Text end,
+        Set = function(v) box.Text = v end,
+        Box = box,
         Frame = card
     }
 end
@@ -1038,6 +1157,245 @@ local function ADEX_RunAllCleanups()
         pcall(fn)
     end
     ADEX_CleanupFunctions = {}
+end
+
+local SAVES_FOLDER = "ADEX_HUB_SAVES"
+local SAVE_EXT = ".txt"
+local META_FILE = "ADEX_HUB_META.txt"
+local INDEX_FILE = "ADEX_HUB_INDEX.txt"
+
+local SavesMemory = {}
+local IndexMemory = {}
+
+local SaveDataEnabled = false
+local AutoLoadEnabled = false
+local LastSaveName = ""
+
+local function EnsureFolder()
+    pcall(function()
+        if isfolder and makefolder and not isfolder(SAVES_FOLDER) then
+            makefolder(SAVES_FOLDER)
+        end
+    end)
+end
+
+local function SanitizeName(name)
+    if type(name) ~= "string" then return "" end
+    name = name:gsub("[^%w_%-]", "")
+    return name
+end
+
+local function GetSavePath(name)
+    return SAVES_FOLDER .. "/" .. name .. SAVE_EXT
+end
+
+local function ReadMetaFile()
+    local meta = {}
+    pcall(function()
+        if isfile and isfile(META_FILE) and readfile then
+            local content = readfile(META_FILE)
+            for line in tostring(content):gmatch("[^\r\n]+") do
+                local k, v = line:match("^(.+)=(.+)$")
+                if k and v then
+                    meta[k] = v
+                end
+            end
+        elseif _G.ADEX_HubMeta then
+            meta = _G.ADEX_HubMeta
+        end
+    end)
+    return meta
+end
+
+local function WriteMetaFile(meta)
+    local lines = {}
+    for k, v in pairs(meta) do
+        table.insert(lines, k .. "=" .. tostring(v))
+    end
+    local content = table.concat(lines, "\n")
+    pcall(function()
+        if writefile then
+            writefile(META_FILE, content)
+        else
+            _G.ADEX_HubMeta = meta
+        end
+    end)
+end
+
+local function ReadIndexFile()
+    local names = {}
+    local seen = {}
+
+    pcall(function()
+        if isfile and isfile(INDEX_FILE) and readfile then
+            local content = readfile(INDEX_FILE)
+            for line in tostring(content):gmatch("[^\r\n]+") do
+                local n = line:match("^%s*(.-)%s*$")
+                if n and n ~= "" and not seen[n] then
+                    seen[n] = true
+                    table.insert(names, n)
+                end
+            end
+        elseif _G.ADEX_SaveIndex then
+            for _, n in ipairs(_G.ADEX_SaveIndex) do
+                if not seen[n] then
+                    seen[n] = true
+                    table.insert(names, n)
+                end
+            end
+        end
+    end)
+
+    for n in pairs(IndexMemory) do
+        if not seen[n] then
+            seen[n] = true
+            table.insert(names, n)
+        end
+    end
+
+    return names
+end
+
+local function WriteIndexFile(names)
+    local content = table.concat(names, "\n")
+    pcall(function()
+        if writefile then
+            writefile(INDEX_FILE, content)
+        else
+            _G.ADEX_SaveIndex = names
+        end
+    end)
+end
+
+local function AddToIndex(name)
+    if type(name) ~= "string" or name == "" then return end
+    IndexMemory[name] = true
+    local names = ReadIndexFile()
+    for _, n in ipairs(names) do
+        if n == name then return end
+    end
+    table.insert(names, name)
+    WriteIndexFile(names)
+end
+
+local function RemoveFromIndex(name)
+    if type(name) ~= "string" or name == "" then return end
+    IndexMemory[name] = nil
+    local names = ReadIndexFile()
+    local newNames = {}
+    for _, n in ipairs(names) do
+        if n ~= name then
+            table.insert(newNames, n)
+        end
+    end
+    WriteIndexFile(newNames)
+end
+
+local ADEX_InitialMeta = ReadMetaFile()
+
+local function SerializeToggles()
+    local lines = {}
+    for name, toggle in pairs(ToggleRegistry) do
+        if toggle and toggle.Get then
+            table.insert(lines, name .. "=" .. tostring(toggle.Get()))
+        end
+    end
+    return table.concat(lines, "\n")
+end
+
+local function SaveToName(name, content)
+    EnsureFolder()
+    local ok = pcall(function()
+        if writefile then
+            writefile(GetSavePath(name), content)
+        else
+            SavesMemory[name] = content
+        end
+    end)
+    if ok then
+        AddToIndex(name)
+    end
+    return ok
+end
+
+local function ReadFromName(name)
+    local content
+    pcall(function()
+        if readfile and isfile and isfile(GetSavePath(name)) then
+            content = readfile(GetSavePath(name))
+        elseif SavesMemory[name] then
+            content = SavesMemory[name]
+        end
+    end)
+    return content
+end
+
+local function DeleteSave(name)
+    if type(name) ~= "string" or name == "" then return false end
+    local ok = pcall(function()
+        if delfile and isfile and isfile(GetSavePath(name)) then
+            delfile(GetSavePath(name))
+        end
+    end)
+    SavesMemory[name] = nil
+    RemoveFromIndex(name)
+    return ok
+end
+
+local function ListSaveNames()
+    local names = {}
+    local seen = {}
+
+    for _, n in ipairs(ReadIndexFile()) do
+        if not seen[n] then
+            seen[n] = true
+            table.insert(names, n)
+        end
+    end
+
+    pcall(function()
+        if listfiles and isfolder and isfolder(SAVES_FOLDER) then
+            local files = listfiles(SAVES_FOLDER)
+            for _, file in ipairs(files) do
+                local name = file:match("([^/\\]+)%.txt$")
+                if name and not seen[name] then
+                    seen[name] = true
+                    table.insert(names, name)
+                end
+            end
+        end
+    end)
+
+    for name in pairs(SavesMemory) do
+        if not seen[name] then
+            seen[name] = true
+            table.insert(names, name)
+        end
+    end
+
+    table.sort(names)
+    return names
+end
+
+local function ApplySaveContent(content)
+    if not content or content == "" then
+        return 0
+    end
+
+    local loaded = 0
+    for line in tostring(content):gmatch("[^\r\n]+") do
+        local key, val = line:match("^(.+)=(.+)$")
+        if key and val then
+            local toggle = ToggleRegistry[key]
+            if toggle and toggle.Set then
+                pcall(function()
+                    toggle.Set(val == "true")
+                end)
+                loaded = loaded + 1
+            end
+        end
+    end
+    return loaded
 end
 
 local Home = CreateTab("Home", "⌂")
@@ -1240,7 +1598,16 @@ ADEX_EspBodyToggle = AddToggle(Visuals, "Esp Body", "Killer (Merah) / Survivor (
 
         Players.PlayerAdded:Connect(SetupPlayer)
 
-        ADEX_AddKiller(RunService.Heartbeat:Connect(function()
+        local espBodyConn
+        espBodyConn = RunService.Heartbeat:Connect(function()
+            if not GUI or not GUI.Parent then
+                if espBodyConn then
+                    espBodyConn:Disconnect()
+                    espBodyConn = nil
+                end
+                return
+            end
+
             local fill = ADEX_EspBodyEnabled and 0.55 or 1
             local outline = ADEX_EspBodyEnabled and 0 or 1
 
@@ -1253,11 +1620,16 @@ ADEX_EspBodyToggle = AddToggle(Visuals, "Esp Body", "Killer (Merah) / Survivor (
                     end
                 end
             end
-        end))
+        end)
 
         ADEX_RegisterCleanup(function()
             if ADEX_EspBodyToggle then ADEX_EspBodyToggle.Set(false) end
             ADEX_EspBodyEnabled = false
+
+            if espBodyConn then
+                pcall(function() espBodyConn:Disconnect() end)
+                espBodyConn = nil
+            end
 
             for _, p in ipairs(Players:GetPlayers()) do
                 if p.Character then
@@ -1428,6 +1800,13 @@ ADEX_CrosshairToggle = AddToggle(Visuals, "Crosshair", "Titik crosshair di tenga
             end)
             pcall(function()
                 RunService:BindToRenderStep("ADEX_CrosshairKiller", Enum.RenderPriority.Last.Value, function()
+                    if not GUI or not GUI.Parent then
+                        pcall(function()
+                            RunService:UnbindFromRenderStep("ADEX_CrosshairKiller")
+                        end)
+                        return
+                    end
+
                     local lp = game:GetService("Players").LocalPlayer
                     if not lp then return end
                     local pgui = lp:FindFirstChildOfClass("PlayerGui")
@@ -1545,6 +1924,13 @@ ADEX_NicknameToggle = AddToggle(Visuals, "Esp Nickname", "Nama pemain • Small 
         end)
         pcall(function()
             RunService:BindToRenderStep("ADEX_NicknameKiller", Enum.RenderPriority.Last.Value, function()
+                if not GUI or not GUI.Parent then
+                    pcall(function()
+                        RunService:UnbindFromRenderStep("ADEX_NicknameKiller")
+                    end)
+                    return
+                end
+
                 if ADEX_NicknameEnabled then
                     return
                 end
@@ -1796,6 +2182,13 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
         end)
         pcall(function()
             RunService:BindToRenderStep("ADEX_GeneratorKiller", Enum.RenderPriority.Last.Value, function()
+                if not GUI or not GUI.Parent then
+                    pcall(function()
+                        RunService:UnbindFromRenderStep("ADEX_GeneratorKiller")
+                    end)
+                    return
+                end
+
                 if ADEX_GeneratorEnabled then
                     return
                 end
@@ -1822,6 +2215,615 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
     end
 end)
 
+local ADEX_AutoGenLoaded = false
+local ADEX_AutoGenEnabled = false
+local ADEX_AutoGenToggle = nil
+local ADEX_AutoGenModeBtn = nil
+local ADEX_AutoGenSetEnabled = nil
+local ADEX_AutoGenCycleMode = nil
+local ADEX_AutoGenGetMode = nil
+
+ADEX_AutoGenToggle = AddToggle(Visuals, "Auto Generator", "Auto skill check (Normal + King Scourge).", false, function(enabled)
+    ADEX_AutoGenEnabled = enabled
+
+    if ADEX_AutoGenSetEnabled then
+        ADEX_AutoGenSetEnabled(enabled)
+    end
+
+    if enabled and not ADEX_AutoGenLoaded then
+        ADEX_AutoGenLoaded = true
+
+        local Players = game:GetService("Players")
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local RunService = game:GetService("RunService")
+        local UserInputService = game:GetService("UserInputService")
+
+        local LocalPlayer = Players.LocalPlayer
+        local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+        local Enabled = false
+        local Mode = "SUCCESS"
+
+        local SUCCESS_MIN = 102
+        local SUCCESS_MAX = 116
+
+        local NEUTRAL_MIN = 116
+        local NEUTRAL_MAX = 159
+
+        local TriggerDelay = 0.035
+        local LastTrigger = 0
+
+        local Busy = false
+        local ScourgeActive = false
+        local ScourgeRound = 0
+
+        local KingScourgeStart
+        local KingScourgeEnd
+
+        pcall(function()
+
+            local KillerPerks =
+                ReplicatedStorage:WaitForChild("Remotes")
+                    :WaitForChild("KillerPerks")
+
+            local KingScourge =
+                KillerPerks:WaitForChild("kingscourge")
+
+            KingScourgeStart =
+                KingScourge:WaitForChild("KingScourgeStart")
+
+            KingScourgeEnd =
+                KingScourge:WaitForChild("KingScourgeEnd")
+
+        end)
+
+        local ScreenGui = GUI
+
+        local Check
+        local Line
+        local Goal
+        local Action
+
+        local function RefreshReferences()
+
+            pcall(function()
+
+                local SkillGui =
+                    PlayerGui:FindFirstChild("SkillCheckPromptGui")
+
+                if SkillGui then
+
+                    Check =
+                        SkillGui:FindFirstChild("Check")
+
+                    if Check then
+
+                        Line =
+                            Check:FindFirstChild("Line")
+
+                        Goal =
+                            Check:FindFirstChild("Goal")
+
+                    end
+
+                end
+
+                local Survivor =
+                    PlayerGui:FindFirstChild("Survivor-mob")
+
+                if Survivor then
+
+                    local Controls =
+                        Survivor:FindFirstChild("Controls")
+
+                    if Controls then
+                        Action =
+                            Controls:FindFirstChild("action")
+                    end
+
+                end
+
+            end)
+
+        end
+
+        RefreshReferences()
+
+        task.spawn(function()
+
+            while ScreenGui.Parent do
+
+                RefreshReferences()
+
+                task.wait(0.5)
+
+            end
+
+        end)
+
+        local function TriggerAction()
+
+            if not Action then
+                RefreshReferences()
+            end
+
+            if not Action then
+                return false
+            end
+
+            local Now = os.clock()
+
+            if Now - LastTrigger < TriggerDelay then
+                return false
+            end
+
+            LastTrigger = Now
+
+            pcall(function()
+
+                if Action:IsA("GuiButton") then
+                    Action:Activate()
+                end
+
+            end)
+
+            if typeof(firesignal) == "function" then
+
+                pcall(function()
+                    firesignal(Action.MouseButton1Down)
+                end)
+
+            end
+
+            return true
+        end
+
+        local function GetAngle()
+
+            if not Line or not Goal then
+                return nil
+            end
+
+            return
+                tonumber(Line.Rotation) or 0,
+                tonumber(Goal.Rotation) or 0
+
+        end
+
+        local function IsSuccess()
+
+            local LineRotation, GoalRotation =
+                GetAngle()
+
+            if not LineRotation then
+                return false
+            end
+
+            local Min =
+                GoalRotation + SUCCESS_MIN
+
+            local Max =
+                GoalRotation + SUCCESS_MAX
+
+            return
+                LineRotation >= Min
+                and
+                LineRotation <= Max
+
+        end
+
+        local function IsNeutral()
+
+            local LineRotation, GoalRotation =
+                GetAngle()
+
+            if not LineRotation then
+                return false
+            end
+
+            local Min =
+                GoalRotation + NEUTRAL_MIN
+
+            local Max =
+                GoalRotation + NEUTRAL_MAX
+
+            return
+                LineRotation > Min
+                and
+                LineRotation <= Max
+
+        end
+
+        local function InstantNormal()
+
+            if not Check or not Line or not Goal then
+                RefreshReferences()
+            end
+
+            if not Check or not Line or not Goal then
+                return
+            end
+
+            if not Check.Visible then
+                return
+            end
+
+            local GoalRotation =
+                tonumber(Goal.Rotation) or 0
+
+            Line.Rotation =
+                GoalRotation + 109
+
+            TriggerAction()
+
+        end
+
+        local function InstantScourge()
+
+            if not Enabled then
+                return
+            end
+
+            if not ScourgeActive then
+                return
+            end
+
+            if not Line or not Goal then
+                RefreshReferences()
+            end
+
+            if not Line or not Goal then
+                return
+            end
+
+            local GoalRotation =
+                tonumber(Goal.Rotation) or 0
+
+            Line.Rotation =
+                GoalRotation + 109
+
+            TriggerAction()
+
+            ScourgeRound += 1
+
+        end
+
+        if KingScourgeStart then
+
+            KingScourgeStart.OnClientEvent:Connect(
+                function(p1,p2,p3)
+
+                    if not Enabled then
+                        return
+                    end
+
+                    ScourgeActive = true
+                    ScourgeRound = 0
+                    Busy = false
+
+                    task.defer(function()
+
+                        if not Enabled then
+                            return
+                        end
+
+                        if Mode == "INSTANT" then
+
+                            InstantScourge()
+
+                        end
+
+                    end)
+
+                end
+            )
+
+        end
+
+        if KingScourgeEnd then
+
+            KingScourgeEnd.OnClientEvent:Connect(
+                function(p)
+
+                    ScourgeActive = false
+                    Busy = false
+
+                end
+            )
+
+        end
+
+        local PreviousVisible = false
+
+        local autoGenConn
+        autoGenConn = RunService.RenderStepped:Connect(function()
+
+            if not GUI or not GUI.Parent then
+                if autoGenConn then
+                    autoGenConn:Disconnect()
+                    autoGenConn = nil
+                end
+                return
+            end
+
+            if not Enabled then
+
+                PreviousVisible = false
+
+                return
+            end
+
+            if not Check then
+                RefreshReferences()
+            end
+
+            if not Check then
+                return
+            end
+
+            local Visible =
+                Check.Visible
+
+            if Visible and not PreviousVisible then
+
+                Busy = false
+
+                if not ScourgeActive then
+
+                    if Mode == "INSTANT" then
+
+                        InstantNormal()
+
+                    end
+
+                end
+
+            end
+
+            PreviousVisible =
+                Visible
+
+            if Visible and not ScourgeActive then
+
+                if not Busy then
+
+                    local ShouldTrigger = false
+
+                    if Mode == "SUCCESS" then
+
+                        ShouldTrigger =
+                            IsSuccess()
+
+                    elseif Mode == "NEUTRAL" then
+
+                        ShouldTrigger =
+                            IsNeutral()
+
+                    end
+
+                    if ShouldTrigger then
+
+                        Busy = true
+
+                        TriggerAction()
+
+                        task.delay(0.07,function()
+
+                            Busy = false
+
+                        end)
+
+                    end
+
+                end
+
+            end
+
+            if ScourgeActive and Visible then
+
+                if Mode == "SUCCESS" then
+
+                    if not Busy and IsSuccess() then
+
+                        Busy = true
+
+                        TriggerAction()
+
+                        task.delay(0.06,function()
+                            Busy = false
+                        end)
+
+                    end
+
+                elseif Mode == "NEUTRAL" then
+
+                    if not Busy and IsNeutral() then
+
+                        Busy = true
+
+                        TriggerAction()
+
+                        task.delay(0.06,function()
+                            Busy = false
+                        end)
+
+                    end
+
+                elseif Mode == "INSTANT" then
+
+                    local CurrentGoal =
+                        tonumber(Goal.Rotation) or 0
+
+                    local CurrentLine =
+                        tonumber(Line.Rotation) or 0
+
+                    local Distance =
+                        math.abs(CurrentLine - CurrentGoal)
+
+                    if Distance > 130 then
+
+                        Busy = false
+
+                    end
+
+                end
+
+            end
+
+        end)
+
+        local goalDetectorConn
+        goalDetectorConn = task.spawn(function()
+
+            local LastGoalRotation = nil
+
+            while GUI and GUI.Parent do
+
+                if Enabled
+                    and ScourgeActive
+                    and Mode == "INSTANT" then
+
+                    RefreshReferences()
+
+                    if Check
+                        and Check.Visible
+                        and Goal
+                        and Line then
+
+                        local CurrentGoal =
+                            tonumber(Goal.Rotation) or 0
+
+                        if LastGoalRotation == nil then
+
+                            LastGoalRotation =
+                                CurrentGoal
+
+                            InstantScourge()
+
+                        elseif
+                            math.abs(
+                                CurrentGoal -
+                                LastGoalRotation
+                            ) > 1 then
+
+                            LastGoalRotation =
+                                CurrentGoal
+
+                            InstantScourge()
+
+                        end
+
+                    end
+
+                else
+
+                    LastGoalRotation = nil
+
+                end
+
+                task.wait(0.005)
+
+            end
+
+        end)
+
+        local function UpdateUI()
+
+            if ADEX_AutoGenModeBtn then
+                if Enabled then
+                    ADEX_AutoGenModeBtn.SetText("Mode : " .. Mode)
+                else
+                    ADEX_AutoGenModeBtn.SetText("Mode : " .. Mode)
+                end
+            end
+
+        end
+
+        ADEX_AutoGenSetEnabled = function(v)
+            Enabled = v
+            Busy = false
+            if not Enabled then
+                ScourgeActive = false
+            end
+            UpdateUI()
+        end
+
+        ADEX_AutoGenGetMode = function()
+            return Mode
+        end
+
+        local Modes = {
+            "SUCCESS",
+            "NEUTRAL",
+            "INSTANT"
+        }
+
+        local ModeIndex = 1
+
+        ADEX_AutoGenCycleMode = function()
+            ModeIndex += 1
+
+            if ModeIndex > #Modes then
+                ModeIndex = 1
+            end
+
+            Mode = Modes[ModeIndex]
+
+            Busy = false
+
+            UpdateUI()
+        end
+
+        LocalPlayer.CharacterAdded:Connect(function()
+
+            Busy = false
+            ScourgeActive = false
+            PreviousVisible = false
+
+            task.wait(1)
+
+            RefreshReferences()
+
+        end)
+
+        UpdateUI()
+
+        if ADEX_AutoGenEnabled then
+            Enabled = true
+            UpdateUI()
+        end
+
+        ADEX_RegisterCleanup(function()
+            if ADEX_AutoGenToggle then ADEX_AutoGenToggle.Set(false) end
+            ADEX_AutoGenEnabled = false
+            Enabled = false
+            ScourgeActive = false
+            Busy = false
+
+            if autoGenConn then
+                pcall(function() autoGenConn:Disconnect() end)
+                autoGenConn = nil
+            end
+        end)
+
+        print("ABCD")
+        print("AUTO GENERATOR v3")
+        print("NORMAL SKILLCHECK : ENABLED")
+        print("KING SCOURGE       : ENABLED")
+        print("SUCCESS            : 102° - 116°")
+        print("NEUTRAL            : 116° - 159°")
+        print("INSTANT            : 109°")
+        print("ACTION TRIGGER     : ORIGINAL")
+        print("==========================================")
+    end
+end)
+
+ADEX_AutoGenModeBtn = AddButton(Visuals, "Mode : SUCCESS", "Ganti mode auto generator.", function()
+    if ADEX_AutoGenCycleMode then
+        ADEX_AutoGenCycleMode()
+    end
+end)
+
 AddSection(PlayerTab, "PLAYER FEATURES")
 AddToggle(PlayerTab, "Feature A", "Tempat fitur player.", false, function(v)
     print("Feature A:", v)
@@ -1840,6 +2842,423 @@ AddButton(Settings, "Reset Position", "Kembalikan UI ke tengah.", function()
 end)
 
 AddLabel(Settings, "Keybind", "RightShift = Minimize / Restore")
+
+AddSection(Settings, "SAVE SYSTEM")
+
+SaveDataEnabled = (ADEX_InitialMeta.SaveData == "true")
+AutoLoadEnabled = (ADEX_InitialMeta.AutoLoad == "true")
+LastSaveName = ADEX_InitialMeta.LastSaveName or ""
+
+AddToggle(Settings, "Save Data", "Aktifkan fitur simpan data.", SaveDataEnabled, function(v)
+    SaveDataEnabled = v
+    local meta = ReadMetaFile()
+    meta.SaveData = tostring(v)
+    WriteMetaFile(meta)
+end, true)
+
+AddToggle(Settings, "Auto Load", "Auto load save terakhir saat script dibuka.", AutoLoadEnabled, function(v)
+    AutoLoadEnabled = v
+    local meta = ReadMetaFile()
+    meta.AutoLoad = tostring(v)
+    WriteMetaFile(meta)
+end, true)
+
+local SaveNameBox = AddTextBox(
+    Settings,
+    "Save Name",
+    "Masukkan nama untuk save slot.",
+    "e.g. config1",
+    LastSaveName,
+    nil
+)
+
+AddButton(Settings, "Save", "Simpan semua toggle dengan nama di atas.", function()
+    if not SaveDataEnabled then
+        warn("[ADEX SAVE] Aktifkan 'Save Data' dulu!")
+        return
+    end
+
+    local raw = SaveNameBox.Get()
+    local name = SanitizeName(raw)
+
+    if name == "" then
+        warn("[ADEX SAVE] Nama save tidak valid!")
+        return
+    end
+
+    local content = SerializeToggles()
+    local ok = SaveToName(name, content)
+
+    if ok then
+        LastSaveName = name
+        SaveNameBox.Set(name)
+        local meta = ReadMetaFile()
+        meta.LastSaveName = name
+        WriteMetaFile(meta)
+        print("[ADEX SAVE] Tersimpan: " .. name)
+    else
+        print("[ADEX SAVE] Gagal menyimpan: " .. name)
+    end
+end)
+
+local ListSavePanel = Create("Frame", {
+    Name = "ListSavePanel",
+    Size = UDim2.fromScale(1, 1),
+    BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    Visible = false,
+    ZIndex = 210
+}, GUI)
+
+local LSP_Card = Create("Frame", {
+    Name = "Card",
+    Size = UDim2.fromOffset(320, 380),
+    Position = UDim2.fromScale(0.5, 0.5),
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    BackgroundColor3 = CONFIG.Colors.Secondary,
+    BorderSizePixel = 0,
+    ClipsDescendants = true,
+    ZIndex = 211
+}, ListSavePanel)
+
+Corner(LSP_Card, CONFIG.Radius.Outer)
+Stroke(LSP_Card, CONFIG.Colors.Border, 1)
+
+Create("Frame", {
+    Name = "TopAccent",
+    Size = UDim2.new(1, 0, 0, 3),
+    BackgroundColor3 = CONFIG.Colors.Accent,
+    BorderSizePixel = 0,
+    ZIndex = 212
+}, LSP_Card)
+
+Create("TextLabel", {
+    Name = "Title",
+    Size = UDim2.new(1, -60, 0, 22),
+    Position = UDim2.fromOffset(16, 14),
+    BackgroundTransparency = 1,
+    Text = "List Save",
+    TextColor3 = CONFIG.Colors.Text,
+    Font = Enum.Font.GothamBold,
+    TextSize = 14,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 213
+}, LSP_Card)
+
+local LSP_Subtitle = Create("TextLabel", {
+    Name = "Subtitle",
+    Size = UDim2.new(1, -60, 0, 14),
+    Position = UDim2.fromOffset(16, 34),
+    BackgroundTransparency = 1,
+    Text = "Klik untuk load • X untuk hapus",
+    TextColor3 = CONFIG.Colors.SubText,
+    Font = Enum.Font.Gotham,
+    TextSize = 9,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 213
+}, LSP_Card)
+
+local LSP_CloseBtn = Create("TextButton", {
+    Name = "CloseBtn",
+    Size = UDim2.fromOffset(28, 28),
+    Position = UDim2.new(1, -36, 0, 12),
+    BackgroundColor3 = CONFIG.Colors.Card,
+    BorderSizePixel = 0,
+    Text = "×",
+    TextColor3 = CONFIG.Colors.Danger,
+    Font = Enum.Font.GothamBold,
+    TextSize = 16,
+    AutoButtonColor = false,
+    Active = true,
+    Selectable = false,
+    ZIndex = 214
+}, LSP_Card)
+
+Corner(LSP_CloseBtn, CONFIG.Radius.Small)
+Stroke(LSP_CloseBtn, CONFIG.Colors.Border, 1)
+
+Create("Frame", {
+    Name = "Divider",
+    Size = UDim2.new(1, -32, 0, 1),
+    Position = UDim2.fromOffset(16, 58),
+    BackgroundColor3 = CONFIG.Colors.Border,
+    BorderSizePixel = 0,
+    ZIndex = 212
+}, LSP_Card)
+
+local LSP_Scroll = Create("ScrollingFrame", {
+    Name = "ListScroll",
+    Size = UDim2.new(1, -32, 1, -110),
+    Position = UDim2.fromOffset(16, 68),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    ScrollBarThickness = 3,
+    ScrollBarImageColor3 = CONFIG.Colors.Accent,
+    CanvasSize = UDim2.new(0, 0, 0, 0),
+    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+    ZIndex = 213
+}, LSP_Card)
+
+Create("UIListLayout", {
+    Padding = UDim.new(0, 6),
+    SortOrder = Enum.SortOrder.LayoutOrder
+}, LSP_Scroll)
+
+local LSP_EmptyLabel = Create("TextLabel", {
+    Name = "EmptyLabel",
+    Size = UDim2.new(1, 0, 0, 60),
+    BackgroundTransparency = 1,
+    Text = "Belum ada save tersimpan.\nGunakan tombol Save untuk membuat.",
+    TextColor3 = CONFIG.Colors.SubText,
+    Font = Enum.Font.Gotham,
+    TextSize = 10,
+    TextWrapped = true,
+    TextXAlignment = Enum.TextXAlignment.Center,
+    TextYAlignment = Enum.TextYAlignment.Center,
+    Visible = false,
+    ZIndex = 214
+}, LSP_Scroll)
+
+local LSP_RefreshBtn = Create("TextButton", {
+    Name = "RefreshBtn",
+    Size = UDim2.new(0.5, -20, 0, 32),
+    Position = UDim2.new(0, 16, 1, -44),
+    BackgroundColor3 = CONFIG.Colors.Card,
+    BorderSizePixel = 0,
+    Text = "Refresh",
+    TextColor3 = CONFIG.Colors.Text,
+    Font = Enum.Font.GothamBold,
+    TextSize = 10,
+    AutoButtonColor = false,
+    Active = true,
+    Selectable = false,
+    ZIndex = 214
+}, LSP_Card)
+
+Corner(LSP_RefreshBtn, CONFIG.Radius.Small)
+Stroke(LSP_RefreshBtn, CONFIG.Colors.Border, 1)
+
+local LSP_DeleteAllBtn = Create("TextButton", {
+    Name = "DeleteAllBtn",
+    Size = UDim2.new(0.5, -20, 0, 32),
+    Position = UDim2.new(0.5, 4, 1, -44),
+    BackgroundColor3 = CONFIG.Colors.Card,
+    BorderSizePixel = 0,
+    Text = "Delete All",
+    TextColor3 = CONFIG.Colors.Danger,
+    Font = Enum.Font.GothamBold,
+    TextSize = 10,
+    AutoButtonColor = false,
+    Active = true,
+    Selectable = false,
+    ZIndex = 214
+}, LSP_Card)
+
+Corner(LSP_DeleteAllBtn, CONFIG.Radius.Small)
+Stroke(LSP_DeleteAllBtn, CONFIG.Colors.Border, 1)
+
+local listSaveOpen = false
+
+local function RefreshListSaveUI()
+    for _, child in ipairs(LSP_Scroll:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+
+    local names = ListSaveNames()
+
+    if #names == 0 then
+        LSP_EmptyLabel.Visible = true
+        LSP_EmptyLabel.Parent = LSP_Scroll
+        LSP_Subtitle.Text = "Belum ada save"
+        return
+    end
+
+    LSP_EmptyLabel.Visible = false
+    LSP_Subtitle.Text = #names .. " save tersimpan • Klik untuk load"
+
+    for i, name in ipairs(names) do
+        local row = Create("TextButton", {
+            Name = "Row_" .. name,
+            Size = UDim2.new(1, -6, 0, 40),
+            BackgroundColor3 = CONFIG.Colors.Card,
+            BorderSizePixel = 0,
+            Text = "",
+            AutoButtonColor = false,
+            Active = true,
+            Selectable = false,
+            LayoutOrder = i,
+            ZIndex = 214
+        }, LSP_Scroll)
+
+        Corner(row, CONFIG.Radius.Small)
+        Stroke(row, CONFIG.Colors.Border, 1)
+
+        local isLast = (name == LastSaveName)
+
+        local nameLabel = Create("TextLabel", {
+            Size = UDim2.new(1, -70, 0, 18),
+            Position = UDim2.fromOffset(10, 4),
+            BackgroundTransparency = 1,
+            Text = name,
+            TextColor3 = isLast and CONFIG.Colors.Accent or CONFIG.Colors.Text,
+            Font = Enum.Font.GothamBold,
+            TextSize = 11,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Active = false,
+            ZIndex = 215
+        }, row)
+
+        local subLabel = Create("TextLabel", {
+            Size = UDim2.new(1, -70, 0, 14),
+            Position = UDim2.fromOffset(10, 22),
+            BackgroundTransparency = 1,
+            Text = isLast and "▶ Terakhir digunakan" or "Klik untuk load",
+            TextColor3 = CONFIG.Colors.SubText,
+            Font = Enum.Font.Gotham,
+            TextSize = 8,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Active = false,
+            ZIndex = 215
+        }, row)
+
+        local deleteBtn = Create("TextButton", {
+            Name = "DeleteBtn",
+            Size = UDim2.fromOffset(26, 26),
+            Position = UDim2.new(1, -34, 0.5, -13),
+            BackgroundColor3 = CONFIG.Colors.Secondary,
+            BorderSizePixel = 0,
+            Text = "×",
+            TextColor3 = CONFIG.Colors.Danger,
+            Font = Enum.Font.GothamBold,
+            TextSize = 14,
+            AutoButtonColor = false,
+            Active = true,
+            Selectable = false,
+            ZIndex = 216
+        }, row)
+
+        Corner(deleteBtn, CONFIG.Radius.Small)
+        Stroke(deleteBtn, CONFIG.Colors.Border, 1)
+
+        deleteBtn.Activated:Connect(function()
+            deleteBtn:Destroy()
+            DeleteSave(name)
+            task.wait(0.05)
+            RefreshListSaveUI()
+        end)
+
+        row.Activated:Connect(function()
+            local content = ReadFromName(name)
+            if content then
+                local loaded = ApplySaveContent(content)
+                LastSaveName = name
+                local meta = ReadMetaFile()
+                meta.LastSaveName = name
+                WriteMetaFile(meta)
+                SaveNameBox.Set(name)
+                print("[ADEX LOAD] Loaded " .. loaded .. " items dari '" .. name .. "'")
+
+                Tween(row, 0.12, {
+                    BackgroundColor3 = CONFIG.Colors.Success
+                })
+                task.delay(0.2, function()
+                    if row and row.Parent then
+                        Tween(row, 0.2, {
+                            BackgroundColor3 = CONFIG.Colors.Card
+                        })
+                    end
+                end)
+
+                task.delay(0.3, function()
+                    RefreshListSaveUI()
+                end)
+            else
+                print("[ADEX LOAD] Gagal load save: " .. name)
+            end
+        end)
+
+        row.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+                Tween(row, 0.08, {
+                    BackgroundColor3 = CONFIG.Colors.Secondary
+                })
+            end
+        end)
+
+        row.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+                Tween(row, 0.12, {
+                    BackgroundColor3 = CONFIG.Colors.Card
+                })
+            end
+        end)
+    end
+end
+
+local function OpenListSave()
+    if listSaveOpen then return end
+    listSaveOpen = true
+
+    ListSavePanel.Visible = true
+    ListSavePanel.BackgroundTransparency = 1
+
+    LSP_Card.Size = UDim2.fromOffset(0, 0)
+    LSP_Card.BackgroundTransparency = 1
+
+    RefreshListSaveUI()
+
+    Tween(ListSavePanel, 0.18, { BackgroundTransparency = 0.55 })
+    Tween(LSP_Card, 0.25, {
+        Size = UDim2.fromOffset(320, 380),
+        BackgroundTransparency = 0
+    })
+end
+
+local function CloseListSave()
+    if not listSaveOpen then return end
+    listSaveOpen = false
+
+    Tween(ListSavePanel, 0.15, { BackgroundTransparency = 1 })
+    Tween(LSP_Card, 0.18, {
+        Size = UDim2.fromOffset(0, 0),
+        BackgroundTransparency = 1
+    })
+
+    task.delay(0.2, function()
+        ListSavePanel.Visible = false
+    end)
+end
+
+LSP_CloseBtn.Activated:Connect(CloseListSave)
+
+LSP_RefreshBtn.Activated:Connect(function()
+    RefreshListSaveUI()
+end)
+
+LSP_DeleteAllBtn.Activated:Connect(function()
+    local names = ListSaveNames()
+    for _, name in ipairs(names) do
+        DeleteSave(name)
+    end
+    task.wait(0.05)
+    RefreshListSaveUI()
+end)
+
+ListSavePanel.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
+        CloseListSave()
+    end
+end)
+
+AddButton(Settings, "List Save", "Tampilkan panel list save tersimpan.", function()
+    OpenListSave()
+end)
 
 local Modal = Create("Frame", {
     Name = "ConfirmModal",
@@ -2285,14 +3704,21 @@ end)
 UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
 
-    if input.KeyCode == Enum.KeyCode.Escape and modalOpen then
-        CloseModal(false)
-        return
+    if input.KeyCode == Enum.KeyCode.Escape then
+        if listSaveOpen then
+            CloseListSave()
+            return
+        end
+        if modalOpen then
+            CloseModal(false)
+            return
+        end
     end
 
     if input.KeyCode ~= CONFIG.Key then return end
 
     if modalOpen then return end
+    if listSaveOpen then return end
 
     if minimized then
         RestoreMenu()
@@ -2444,6 +3870,17 @@ LoadingConnection = RunService.RenderStepped:Connect(function()
         if Loader and Loader.Parent then
             Loader:Destroy()
         end
+
+        if AutoLoadEnabled and LastSaveName ~= "" then
+            task.wait(0.2)
+            local content = ReadFromName(LastSaveName)
+            if content then
+                local loaded = ApplySaveContent(content)
+                print("[ADEX AUTO LOAD] Loaded " .. loaded .. " items dari '" .. LastSaveName .. "'")
+            else
+                print("[ADEX AUTO LOAD] Save '" .. LastSaveName .. "' tidak ditemukan")
+            end
+        end
     end
 end)
 
@@ -2473,6 +3910,19 @@ GUI.Destroying:Connect(function()
         if StatusCard and StatusCard.SetStatus then
             StatusCard.SetStatus(false)
         end
+    end)
+
+    pcall(function()
+        RunService:UnbindFromRenderStep("ADEX_CrosshairKiller")
+    end)
+    pcall(function()
+        RunService:UnbindFromRenderStep("ADEX_NicknameKiller")
+    end)
+    pcall(function()
+        RunService:UnbindFromRenderStep("ADEX_GeneratorKiller")
+    end)
+    pcall(function()
+        RunService:UnbindFromRenderStep("ADEX_AutoGenKiller")
     end)
 
     pcall(ADEX_RunAllCleanups)
