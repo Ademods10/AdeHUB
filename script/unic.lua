@@ -828,12 +828,21 @@ end
 
 local ADEX_InitialMeta = ReadMetaFile()
 
+-- ══════════════════════════════════════════════════════════════════════════
+-- FIX #4: SerializeToggles sekarang sort by key untuk urutan deterministik
+-- ══════════════════════════════════════════════════════════════════════════
 local function SerializeToggles()
-local lines = {}
+local keys = {}
 for name, toggle in pairs(ToggleRegistry) do
 if toggle and toggle.Get then
-table.insert(lines, name .. "=" .. tostring(toggle.Get()))
+table.insert(keys, name)
 end
+end
+table.sort(keys)
+local lines = {}
+for _, name in ipairs(keys) do
+local toggle = ToggleRegistry[name]
+table.insert(lines, name .. "=" .. tostring(toggle.Get()))
 end
 return table.concat(lines, "\n")
 end
@@ -1117,8 +1126,12 @@ meta.PinnedPlayers = table.concat(names, ",")
 WriteMetaFile(meta)
 end
 
+-- ══════════════════════════════════════════════════════════════════════════
+-- FIX #2: TeleportToPlayer cek targetPlayer.Parent (kalau player keluar)
+-- ══════════════════════════════════════════════════════════════════════════
 local function TeleportToPlayer(targetPlayer)
 if not targetPlayer then return end
+if not targetPlayer.Parent then warn("[ADEX TELEPORT] Player sudah keluar") return end
 local lp = Players.LocalPlayer
 if not lp or targetPlayer == lp then return end
 local char = lp.Character
@@ -1551,12 +1564,18 @@ pcall(function() TeleportModal:Destroy() end)
 end
 end)
 
+-- ══════════════════════════════════════════════════════════════════════════
+-- FIX #1: _adexAutoLoadActive flag untuk mencegah Auto Save menimpa save
+--         dengan default value sebelum Auto Load selesai
+-- ══════════════════════════════════════════════════════════════════════════
+local _adexAutoLoadActive = AutoLoadEnabled and LastSaveName ~= ""
+
 task.spawn(function()
 while GUI.Parent and Loader and Loader.Parent do
 task.wait(0.1)
 end
 task.wait(0.4)
-if not GUI.Parent then return end
+if not GUI.Parent then _adexAutoLoadActive = false return end
 if AutoLoadEnabled and LastSaveName ~= "" then
 local content = ReadFromName(LastSaveName)
 if content then
@@ -1566,12 +1585,13 @@ else
 print("[ADEX AUTO LOAD] Save '" .. LastSaveName .. "' tidak ditemukan")
 end
 end
+_adexAutoLoadActive = false
 end)
 
 local lastSavedContent = ""
 task.spawn(function()
 while GUI.Parent do
-if AutoSaveEnabled and LastSaveName ~= "" then
+if not _adexAutoLoadActive and AutoSaveEnabled and LastSaveName ~= "" then
 local ok, content = pcall(SerializeToggles)
 if ok and content and content ~= "" and content ~= lastSavedContent then
 local saved = SaveToName(LastSaveName, content)
@@ -1985,6 +2005,7 @@ end)
 
 -- ══════════════════════════════════════════════════════════════════════════
 -- ▼▼▼ MODULE LOADER (NEW) — load script/Nama1.lua, Nama2.lua, dll ▼▼▼
+-- FIX #3: loadstring fallback ke load (untuk kompatibilitas executor)
 -- ══════════════════════════════════════════════════════════════════════════
 task.defer(function()
     if type(RemoteSettings.Modules) ~= "table" then return end
@@ -1998,10 +2019,17 @@ task.defer(function()
                         warn("[ADEX MODULE] Gagal fetch: " .. modName)
                         return
                     end
-                    local fn = loadstring(body)
+                    local loader = loadstring or load
+                    if not loader then
+                        warn("[ADEX MODULE] loadstring/load tidak tersedia: " .. modName)
+                        return
+                    end
+                    local fn = loader(body)
                     if fn then
                         print("[ADEX MODULE] Loaded: " .. modName)
                         fn()
+                    else
+                        warn("[ADEX MODULE] Gagal compile: " .. modName)
                     end
                 end)
                 if not ok then
