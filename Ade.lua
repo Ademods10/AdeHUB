@@ -1981,39 +1981,28 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
 
         local MAX_DISTANCE = 1000
         local VALUE_NAME = "RepairProgress"
-
         local PERCENT_TEXT_SIZE = 14
-
         local PERCENT_HEIGHT = 4
 
         local function FormatPercent(value)
             value = tonumber(value)
-
-            if not value then
-                return nil
-            end
-
+            if not value then return nil end
             return math.clamp(math.floor(value + 0.5), 0, 100)
         end
 
         local function GetPart(generator)
-
             if generator:IsA("BasePart") then
                 return generator
             end
-
             if generator:IsA("Model") then
                 return generator.PrimaryPart
                     or generator:FindFirstChildWhichIsA("BasePart", true)
             end
-
             return nil
         end
 
         local function FindRepairProgress(generator)
-
             local value = generator:FindFirstChild(VALUE_NAME, true)
-
             if value and value:IsA("ValueBase") then
                 return value, "Value"
             end
@@ -2023,158 +2012,156 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
             end
 
             for _, object in ipairs(generator:GetDescendants()) do
-
                 if object:GetAttribute(VALUE_NAME) ~= nil then
                     return object, "Attribute"
                 end
-
             end
 
             return nil
         end
 
         local function CreateESP(generator)
+            if not generator or not generator.Parent then return end
 
             local part = GetPart(generator)
+            if not part then return end
 
-            if not part then
-                return
-            end
-
-            if part:FindFirstChild("ADEX_GeneratorESP") then
+            -- Dedup recursive (cek seluruh hierarki generator)
+            if generator:FindFirstChild("ADEX_GeneratorESP", true)
+                or generator:FindFirstChild("ADEX_GeneratorPercent", true) then
                 return
             end
 
             local progress, source = FindRepairProgress(generator)
 
+            -- Kalau RepairProgress belum ada, tunggu sampai muncul
             if not progress then
+                local resolved = false
+                local watchConn
+                watchConn = generator.DescendantAdded:Connect(function()
+                    if resolved then return end
+                    local p = FindRepairProgress(generator)
+                    if p then
+                        resolved = true
+                        pcall(function() watchConn:Disconnect() end)
+                        if generator.Parent then
+                            task.wait(0.1)
+                            CreateESP(generator)
+                        end
+                    end
+                end)
+                task.delay(30, function()
+                    if not resolved and watchConn then
+                        pcall(function() watchConn:Disconnect() end)
+                    end
+                end)
                 return
             end
 
             local highlight = Instance.new("Highlight")
-
             highlight.Name = "ADEX_GeneratorESP"
             highlight.Adornee = generator
-
             highlight.FillColor = Color3.fromRGB(255, 190, 0)
             highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-
             highlight.FillTransparency = 0.55
             highlight.OutlineTransparency = 0
-
             highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-
             highlight.Parent = part
 
+            -- Pakai Model sebagai adornee → posisi stabil (tidak ikut part beranimasi)
             local billboard = Instance.new("BillboardGui")
-
             billboard.Name = "ADEX_GeneratorPercent"
-            billboard.Adornee = part
-
+            billboard.Adornee = generator
             billboard.Size = UDim2.fromOffset(120, 25)
-
             billboard.StudsOffset = Vector3.new(0, PERCENT_HEIGHT, 0)
-
             billboard.AlwaysOnTop = true
             billboard.MaxDistance = MAX_DISTANCE
-
             billboard.Parent = part
 
             local label = Instance.new("TextLabel")
-
             label.Name = "Percentage"
-
             label.Size = UDim2.fromScale(1, 1)
-
             label.BackgroundTransparency = 1
-
             label.Text = "0%"
-
             label.TextSize = PERCENT_TEXT_SIZE
-
             label.Font = Enum.Font.GothamBold
-
             label.TextColor3 = Color3.fromRGB(255, 80, 70)
-
             label.TextStrokeTransparency = 0
             label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-
             label.TextXAlignment = Enum.TextXAlignment.Center
             label.TextYAlignment = Enum.TextYAlignment.Center
-
             label.Parent = billboard
 
+            local lastPercent = 0
+            local currentProgress = progress
+            local currentSource = source
+            local valueConn
+
             local function Update()
+                -- Kalau RepairProgress dihapus (umum saat 100%), tampilkan nilai terakhir
+                if not currentProgress or not currentProgress.Parent then
+                    local p, s = FindRepairProgress(generator)
+                    if p then
+                        currentProgress = p
+                        currentSource = s
+                        if valueConn then
+                            pcall(function() valueConn:Disconnect() end)
+                        end
+                        if currentSource == "Value" then
+                            valueConn = currentProgress:GetPropertyChangedSignal("Value"):Connect(Update)
+                        else
+                            valueConn = currentProgress:GetAttributeChangedSignal(VALUE_NAME):Connect(Update)
+                        end
+                    else
+                        return -- tetap tampilkan lastPercent (mis. 100%)
+                    end
+                end
 
                 local rawValue
-
-                if source == "Value" then
-                    rawValue = progress.Value
+                if currentSource == "Value" then
+                    rawValue = currentProgress.Value
                 else
-                    rawValue = progress:GetAttribute(VALUE_NAME)
+                    rawValue = currentProgress:GetAttribute(VALUE_NAME)
                 end
 
                 local percent = FormatPercent(rawValue)
-
                 if percent == nil then
-                    label.Text = "0%"
+                    label.Text = lastPercent .. "%"
                     return
                 end
 
+                lastPercent = percent
                 label.Text = percent .. "%"
 
                 if percent >= 100 then
-
-                    label.TextColor3 = Color3.fromRGB(
-                        50, 255, 100
-                    )
-
+                    label.TextColor3 = Color3.fromRGB(50, 255, 100)
                 elseif percent >= 50 then
-
-                    label.TextColor3 = Color3.fromRGB(
-                        255, 220, 50
-                    )
-
+                    label.TextColor3 = Color3.fromRGB(255, 220, 50)
                 else
-
-                    label.TextColor3 = Color3.fromRGB(
-                        255, 80, 70
-                    )
-
+                    label.TextColor3 = Color3.fromRGB(255, 80, 70)
                 end
             end
 
-            Update()
-
-            if source == "Value" then
-
-                progress:GetPropertyChangedSignal("Value"):Connect(Update)
-
+            if currentSource == "Value" then
+                valueConn = currentProgress:GetPropertyChangedSignal("Value"):Connect(Update)
             else
-
-                progress:GetAttributeChangedSignal(VALUE_NAME):Connect(Update)
-
+                valueConn = currentProgress:GetAttributeChangedSignal(VALUE_NAME):Connect(Update)
             end
+
+            Update()
         end
 
         for _, object in ipairs(Workspace:GetDescendants()) do
-
             if object.Name == "Generator" then
                 CreateESP(object)
             end
-
         end
 
         Workspace.DescendantAdded:Connect(function(object)
-
             if object.Name == "Generator" then
-
                 task.wait(0.2)
-
                 CreateESP(object)
-
             end
-
         end)
 
         pcall(function()
@@ -2192,9 +2179,14 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
                 if ADEX_GeneratorEnabled then
                     return
                 end
+
                 for _, obj in ipairs(Workspace:GetDescendants()) do
                     if obj.Name == "ADEX_GeneratorESP" or obj.Name == "ADEX_GeneratorPercent" then
-                        if obj:IsA("Highlight") or obj:IsA("BillboardGui") then
+                        -- Highlight tidak punya .Enabled → pakai transparency
+                        if obj:IsA("Highlight") then
+                            obj.FillTransparency = 1
+                            obj.OutlineTransparency = 1
+                        elseif obj:IsA("BillboardGui") then
                             obj.Enabled = false
                         end
                     end
