@@ -1,8 +1,10 @@
 {
-  "Title": "ADE HUB",
-  "Version": "1.0.0",
-  "Welcome": "ADE MODERN HUB",
+  "Title": "ADEX HUB",
+  "Version": "3.8.1",
+  "Welcome": "ADEX MODERN HUB",
   "WelcomeDescription": "Compact • Responsive • Android + PC",
+  "AnnouncementTitle": "📢 Pengumuman",
+  "Announcement": "Update v3.8.1: Fitur Nickname ESP baru + Slider jarak render. Silakan atur di tab Visuals.",
   "StatusLabel": "Script Status",
   "Status": "Online",
   "Modules": []
