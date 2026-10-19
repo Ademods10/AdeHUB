@@ -1911,7 +1911,7 @@ and input.UserInputType ~= Enum.UserInputType.Touch then
 return
 end
 
-if closeBusy or modalOpen then return end closeBusy = true OpenModal() task.delay(0.30, function() closeBusy = false end) 
+if closeBusy then return end if modalOpen then CloseModal(false) return end closeBusy = true local ok, err = pcall(OpenModal) if not ok then warn("[ADEX] OpenModal error:", err) end task.delay(0.30, function() closeBusy = false end) 
 
 end)
 
