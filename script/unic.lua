@@ -5,9 +5,6 @@ local CoreGui = game:GetService("CoreGui")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
 
--- ══════════════════════════════════════════════════════════════════════════
--- ▼▼▼ REMOTE SETTINGS (NEW) — baca settings.json dari GitHub ▼▼▼
--- ══════════════════════════════════════════════════════════════════════════
 local SETTINGS_BASE = ...
 if type(SETTINGS_BASE) ~= "string" then SETTINGS_BASE = _G.ADEX_SETTINGS_BASE end
 if type(SETTINGS_BASE) ~= "string" then
@@ -33,7 +30,6 @@ pcall(function()
         if type(decoded) == "table" then RemoteSettings = decoded end
     end
 end)
--- ▲▲▲ END REMOTE SETTINGS ▲▲▲
 
 local CONFIG = {
 Name = RemoteSettings.Title or "ADEX HUB",
@@ -614,6 +610,99 @@ local card = Create("Frame", { Size = UDim2.new(1, -3, 0, height), BackgroundCol
 
 end
 
+local function AddSlider(page, title, min, max, default, callback)
+local state = math.clamp(default or min, min, max)
+local height = 58
+
+local card = Create("Frame", { Size = UDim2.new(1, -3, 0, height), BackgroundColor3 = CONFIG.Colors.Card, BorderSizePixel = 0, ZIndex = 2 }, page)
+Corner(card, CONFIG.Radius.Card)
+Stroke(card)
+
+Create("TextLabel", { Size = UDim2.new(1, -90, 0, 18), Position = UDim2.fromOffset(10, 5), BackgroundTransparency = 1, Text = title, TextColor3 = CONFIG.Colors.Text, Font = Enum.Font.GothamMedium, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Left, Active = false, ZIndex = 3 }, card)
+
+local valueLabel = Create("TextLabel", { Size = UDim2.fromOffset(70, 18), Position = UDim2.new(1, -80, 0, 5), BackgroundTransparency = 1, Text = tostring(math.floor(state + 0.5)), TextColor3 = CONFIG.Colors.Accent, Font = Enum.Font.GothamBold, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Right, Active = false, ZIndex = 3 }, card)
+
+local track = Create("Frame", { Size = UDim2.new(1, -20, 0, 6), Position = UDim2.fromOffset(10, 40), BackgroundColor3 = CONFIG.Colors.Secondary, BorderSizePixel = 0, ZIndex = 3, Active = true }, card)
+Corner(track, 3)
+
+local fill = Create("Frame", { Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = CONFIG.Colors.Accent, BorderSizePixel = 0, ZIndex = 4 }, track)
+Corner(fill, 3)
+
+local knob = Create("Frame", { Size = UDim2.fromOffset(14, 14), Position = UDim2.new(0, 0, 0.5, 0), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = Color3.fromRGB(255, 255, 255), BorderSizePixel = 0, ZIndex = 5 }, track)
+Corner(knob, 14)
+
+local function UpdateVisual(v)
+    local alpha = 0
+    if max > min then alpha = (v - min) / (max - min) end
+    alpha = math.clamp(alpha, 0, 1)
+    fill.Size = UDim2.new(alpha, 0, 1, 0)
+    knob.Position = UDim2.new(alpha, 0, 0.5, 0)
+    valueLabel.Text = tostring(math.floor(v + 0.5))
+end
+
+UpdateVisual(state)
+
+local sliderDragging = false
+
+local function SetFromX(x)
+    local trackAbsX = track.AbsolutePosition.X
+    local trackAbsW = track.AbsoluteSize.X
+    if trackAbsW <= 0 then return end
+    local alpha = math.clamp((x - trackAbsX) / trackAbsW, 0, 1)
+    local v = min + alpha * (max - min)
+    v = math.floor(v + 0.5)
+    if v == state then return end
+    state = v
+    UpdateVisual(v)
+    if callback then
+        task.spawn(function()
+            local ok, err = pcall(callback, v)
+            if not ok then warn("[ADEX] Slider error:", err) end
+        end)
+    end
+end
+
+track.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
+        sliderDragging = true
+        SetFromX(input.Position.X)
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if not sliderDragging then return end
+    if input.UserInputType == Enum.UserInputType.MouseMovement
+    or input.UserInputType == Enum.UserInputType.Touch then
+        SetFromX(input.Position.X)
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
+        sliderDragging = false
+    end
+end)
+
+return {
+    Get = function() return state end,
+    Set = function(v)
+        v = math.clamp(v, min, max)
+        if v == state then return end
+        state = v
+        UpdateVisual(v)
+        if callback then
+            task.spawn(function()
+                local ok, err = pcall(callback, v)
+                if not ok then warn("[ADEX] Slider error:", err) end
+            end)
+        end
+    end,
+    Frame = card
+}
+end
+
 local ADEX_CleanupFunctions = {}
 
 local function ADEX_RegisterCleanup(fn)
@@ -644,6 +733,12 @@ local Settings = CreateTab("Settings", "⚙")
 AddSection(Home, "WELCOME")
 AddLabel(Home, RemoteSettings.Welcome or "ADEX MODERN HUB", RemoteSettings.WelcomeDescription or "Compact • Responsive • Android + PC")
 
+local announcementText = RemoteSettings.Announcement or RemoteSettings.Description
+local announcementTitle = RemoteSettings.AnnouncementTitle or RemoteSettings.DescriptionTitle or "Pengumuman"
+if announcementText and tostring(announcementText) ~= "" then
+    AddLabel(Home, tostring(announcementTitle), tostring(announcementText))
+end
+
 AddSection(Home, "STATUS SCRIPT")
 local StatusCard = AddStatusLabel(Home, RemoteSettings.StatusLabel or "Script Status")
 StatusCard.SetStatus(true)
@@ -652,6 +747,144 @@ if RemoteSettings.Status and RemoteSettings.Status ~= "" then
 end
 
 AddSection(Visuals, "VISUAL FEATURES")
+
+local ADEX_NicknameEnabled = false
+local ADEX_NicknameDistance = 500
+local ADEX_NicknameLoaded = false
+local ADEX_NicknameToggle = nil
+local ADEX_NicknameBillboards = {}
+local ADEX_NicknameCharConnections = {}
+
+local function ADEX_CreateNicknameBillboard(player, character)
+    if not character then return end
+    local head = character:FindFirstChild("Head")
+    if not head then return end
+    local old = head:FindFirstChild("ADEX_NicknameESP")
+    if old then old:Destroy() end
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ADEX_NicknameESP"
+    billboard.Adornee = head
+    billboard.Size = UDim2.fromOffset(120, 22)
+    billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+    billboard.AlwaysOnTop = true
+    billboard.MaxDistance = ADEX_NicknameDistance
+    billboard.Parent = head
+    local label = Instance.new("TextLabel")
+    label.Name = "Nickname"
+    label.Size = UDim2.fromScale(1, 1)
+    label.BackgroundTransparency = 1
+    label.Text = player.DisplayName
+    label.TextSize = 13
+    label.Font = Enum.Font.GothamMedium
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextStrokeTransparency = 0.25
+    label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    label.TextXAlignment = Enum.TextXAlignment.Center
+    label.TextYAlignment = Enum.TextYAlignment.Center
+    label.Parent = billboard
+    ADEX_NicknameBillboards[player] = billboard
+end
+
+local function ADEX_DestroyNicknameBillboard(player)
+    if ADEX_NicknameBillboards[player] then
+        pcall(function() ADEX_NicknameBillboards[player]:Destroy() end)
+        ADEX_NicknameBillboards[player] = nil
+    end
+    if player.Character then
+        local head = player.Character:FindFirstChild("Head")
+        if head then
+            local bb = head:FindFirstChild("ADEX_NicknameESP")
+            if bb then pcall(function() bb:Destroy() end) end
+        end
+    end
+end
+
+local function ADEX_SetupNicknamePlayer(player)
+    if player == Players.LocalPlayer then return end
+    if ADEX_NicknameCharConnections[player] then
+        pcall(function() ADEX_NicknameCharConnections[player]:Disconnect() end)
+        ADEX_NicknameCharConnections[player] = nil
+    end
+    local conn = player.CharacterAdded:Connect(function(character)
+        task.wait(0.5)
+        if ADEX_NicknameEnabled then
+            ADEX_CreateNicknameBillboard(player, character)
+        end
+    end)
+    ADEX_NicknameCharConnections[player] = conn
+    if ADEX_NicknameEnabled then
+        if player.Character then
+            ADEX_CreateNicknameBillboard(player, player.Character)
+        end
+    end
+end
+
+local function ADEX_InitNickname()
+    if ADEX_NicknameLoaded then return end
+    ADEX_NicknameLoaded = true
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= Players.LocalPlayer then
+            ADEX_SetupNicknamePlayer(p)
+        end
+    end
+    Players.PlayerAdded:Connect(function(p)
+        if ADEX_NicknameEnabled then
+            ADEX_SetupNicknamePlayer(p)
+        end
+    end)
+    Players.PlayerRemoving:Connect(function(p)
+        ADEX_DestroyNicknameBillboard(p)
+        if ADEX_NicknameCharConnections[p] then
+            pcall(function() ADEX_NicknameCharConnections[p]:Disconnect() end)
+            ADEX_NicknameCharConnections[p] = nil
+        end
+    end)
+end
+
+local function ADEX_RefreshAllNicknames()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= Players.LocalPlayer then
+            if ADEX_NicknameEnabled then
+                if p.Character then
+                    ADEX_CreateNicknameBillboard(p, p.Character)
+                end
+            else
+                ADEX_DestroyNicknameBillboard(p)
+            end
+        end
+    end
+end
+
+ADEX_NicknameToggle = AddToggle(Visuals, "Nickname", "ESP nama pemain di atas kepala.", false, function(enabled)
+    ADEX_NicknameEnabled = enabled
+    ADEX_InitNickname()
+    ADEX_RefreshAllNicknames()
+end)
+
+local ADEX_NicknameSlider = AddSlider(Visuals, "Jarak Render Nickname", 50, 2000, 500, function(value)
+    ADEX_NicknameDistance = value
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Character then
+            local head = p.Character:FindFirstChild("Head")
+            if head then
+                local bb = head:FindFirstChild("ADEX_NicknameESP")
+                if bb then bb.MaxDistance = value end
+            end
+        end
+    end
+end)
+
+ADEX_RegisterCleanup(function()
+    if ADEX_NicknameToggle then pcall(function() ADEX_NicknameToggle.Set(false) end) end
+    ADEX_NicknameEnabled = false
+    for _, p in ipairs(Players:GetPlayers()) do
+        ADEX_DestroyNicknameBillboard(p)
+    end
+    for _, conn in pairs(ADEX_NicknameCharConnections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    ADEX_NicknameCharConnections = {}
+end)
 
 AddSection(PlayerTab, "PENCARI NAMA PLAYER")
 
@@ -665,10 +898,6 @@ FloatingLogo.Position = UDim2.fromScale(0.5, 0.5) ClampInside(FloatingLogo)
 end)
 
 AddLabel(Settings, "Keybind", "RightShift = Minimize / Restore")
-
--- ══════════════════════════════════════════════════════════════════════════
--- ▼▼▼ NEW ADDITIONS — SAVE LIST + AUTO SAVE/LOAD + PLAYER SEARCH ▼▼▼
--- ══════════════════════════════════════════════════════════════════════════
 
 local SAVES_FOLDER = "ADEX_HUB_SAVES"
 local SAVE_EXT = ".txt"
@@ -828,9 +1057,6 @@ end
 
 local ADEX_InitialMeta = ReadMetaFile()
 
--- ══════════════════════════════════════════════════════════════════════════
--- FIX #4: SerializeToggles sekarang sort by key untuk urutan deterministik
--- ══════════════════════════════════════════════════════════════════════════
 local function SerializeToggles()
 local keys = {}
 for name, toggle in pairs(ToggleRegistry) do
@@ -1126,9 +1352,6 @@ meta.PinnedPlayers = table.concat(names, ",")
 WriteMetaFile(meta)
 end
 
--- ══════════════════════════════════════════════════════════════════════════
--- FIX #2: TeleportToPlayer cek targetPlayer.Parent (kalau player keluar)
--- ══════════════════════════════════════════════════════════════════════════
 local function TeleportToPlayer(targetPlayer)
 if not targetPlayer then return end
 if not targetPlayer.Parent then warn("[ADEX TELEPORT] Player sudah keluar") return end
@@ -1564,10 +1787,6 @@ pcall(function() TeleportModal:Destroy() end)
 end
 end)
 
--- ══════════════════════════════════════════════════════════════════════════
--- FIX #1: _adexAutoLoadActive flag untuk mencegah Auto Save menimpa save
---         dengan default value sebelum Auto Load selesai
--- ══════════════════════════════════════════════════════════════════════════
 local _adexAutoLoadActive = AutoLoadEnabled and LastSaveName ~= ""
 
 task.spawn(function()
@@ -1608,10 +1827,6 @@ end
 task.wait(1.5)
 end
 end)
-
--- ══════════════════════════════════════════════════════════════════════════
--- ▲▲▲ END NEW ADDITIONS ▲▲▲
--- ══════════════════════════════════════════════════════════════════════════
 
 local Modal = Create("Frame", {
 Name = "ConfirmModal",
@@ -2003,10 +2218,6 @@ dragging = false dragTarget = nil dragStart = nil for obj in pairs(ActiveTweens)
 
 end)
 
--- ══════════════════════════════════════════════════════════════════════════
--- ▼▼▼ MODULE LOADER (NEW) — load script/Nama1.lua, Nama2.lua, dll ▼▼▼
--- FIX #3: loadstring fallback ke load (untuk kompatibilitas executor)
--- ══════════════════════════════════════════════════════════════════════════
 task.defer(function()
     if type(RemoteSettings.Modules) ~= "table" then return end
     for _, modName in ipairs(RemoteSettings.Modules) do
@@ -2039,4 +2250,3 @@ task.defer(function()
         end
     end
 end)
--- ▲▲▲ END MODULE LOADER ▲▲▲
