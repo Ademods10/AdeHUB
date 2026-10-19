@@ -11,7 +11,7 @@ local HttpService = game:GetService("HttpService")
 local SETTINGS_BASE = ...
 if type(SETTINGS_BASE) ~= "string" then SETTINGS_BASE = _G.ADEX_SETTINGS_BASE end
 if type(SETTINGS_BASE) ~= "string" then
-    SETTINGS_BASE = "https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main"
+    SETTINGS_BASE = "https://raw.githubusercontent.com/Ademods10/AdeHUB/main"
 end
 
 local function httpGet(url)
