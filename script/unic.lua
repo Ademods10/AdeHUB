@@ -886,6 +886,161 @@ ADEX_RegisterCleanup(function()
     ADEX_NicknameCharConnections = {}
 end)
 
+local ADEX_FlyEnabled = false
+local ADEX_FlySpeed = 50
+local ADEX_FlyConnection = nil
+local ADEX_FlyBodyVelocity = nil
+local ADEX_FlyBodyGyro = nil
+local ADEX_FlyToggle = nil
+local ADEX_FlySpeedSlider = nil
+local ADEX_FlyCharConn = nil
+local ADEX_FlyOriginalPlatformStand = nil
+
+local function ADEX_StopFly()
+    ADEX_FlyEnabled = false
+    if ADEX_FlyConnection then
+        pcall(function() ADEX_FlyConnection:Disconnect() end)
+        ADEX_FlyConnection = nil
+    end
+    if ADEX_FlyCharConn then
+        pcall(function() ADEX_FlyCharConn:Disconnect() end)
+        ADEX_FlyCharConn = nil
+    end
+    if ADEX_FlyBodyVelocity then
+        pcall(function() ADEX_FlyBodyVelocity:Destroy() end)
+        ADEX_FlyBodyVelocity = nil
+    end
+    if ADEX_FlyBodyGyro then
+        pcall(function() ADEX_FlyBodyGyro:Destroy() end)
+        ADEX_FlyBodyGyro = nil
+    end
+    local lp = Players.LocalPlayer
+    if lp and lp.Character then
+        local hrp = lp.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local old = hrp:FindFirstChild("ADEX_FlyVelocity")
+            if old then pcall(function() old:Destroy() end) end
+            local old2 = hrp:FindFirstChild("ADEX_FlyGyro")
+            if old2 then pcall(function() old2:Destroy() end) end
+        end
+        local hum = lp.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            pcall(function()
+                if ADEX_FlyOriginalPlatformStand ~= nil then hum.PlatformStand = ADEX_FlyOriginalPlatformStand end
+            end)
+        end
+    end
+end
+
+local function ADEX_StartFly()
+    ADEX_StopFly()
+    local lp = Players.LocalPlayer
+    if not lp or not lp.Character then
+        warn("[ADEX FLY] Karakter belum siap")
+        return false
+    end
+    local hrp = lp.Character:FindFirstChild("HumanoidRootPart")
+    local hum = lp.Character:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then
+        warn("[ADEX FLY] HumanoidRootPart tidak ditemukan")
+        return false
+    end
+
+    ADEX_FlyOriginalPlatformStand = hum.PlatformStand
+    hum.PlatformStand = true
+
+    ADEX_FlyEnabled = true
+
+    local bv = Instance.new("BodyVelocity")
+    bv.Name = "ADEX_FlyVelocity"
+    bv.MaxForce = Vector3.new(100000, 100000, 100000)
+    bv.Velocity = Vector3.new(0, 0, 0)
+    bv.Parent = hrp
+    ADEX_FlyBodyVelocity = bv
+
+    local bg = Instance.new("BodyGyro")
+    bg.Name = "ADEX_FlyGyro"
+    bg.MaxTorque = Vector3.new(100000, 100000, 100000)
+    bg.CFrame = hrp.CFrame
+    bg.Parent = hrp
+    ADEX_FlyBodyGyro = bg
+
+    ADEX_FlyConnection = RunService.RenderStepped:Connect(function()
+        if not ADEX_FlyEnabled then return end
+        if not lp.Character then
+            if ADEX_FlyToggle then ADEX_FlyToggle.Set(false) end
+            return
+        end
+        local curHRP = lp.Character:FindFirstChild("HumanoidRootPart")
+        local curHum = lp.Character:FindFirstChildOfClass("Humanoid")
+        if not curHRP or not curHum or not ADEX_FlyBodyVelocity or not ADEX_FlyBodyVelocity.Parent then
+            if ADEX_FlyToggle then ADEX_FlyToggle.Set(false) end
+            return
+        end
+        local camera = workspace.CurrentCamera
+        if not camera then return end
+
+        local camCF = camera.CFrame
+        local moveDirection = Vector3.new(0, 0, 0)
+        
+        local mv = curHum.MoveDirection
+        if mv.Magnitude > 0.01 then
+            local flatLook = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
+            if flatLook.Magnitude > 0.001 then flatLook = flatLook.Unit else flatLook = Vector3.new(0,0,-1) end
+            local flatRight = Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z)
+            if flatRight.Magnitude > 0.001 then flatRight = flatRight.Unit else flatRight = Vector3.new(1,0,0) end
+            
+            local fwd = mv:Dot(flatLook)
+            local side = mv:Dot(flatRight)
+            moveDirection = (camCF.LookVector * fwd) + (camCF.RightVector * side)
+        end
+
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+            moveDirection = moveDirection + Vector3.new(0, 1, 0)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.RightControl) then
+            moveDirection = moveDirection - Vector3.new(0, 1, 0)
+        end
+
+        if moveDirection.Magnitude > 0 then
+            moveDirection = moveDirection.Unit
+        end
+
+        ADEX_FlyBodyVelocity.Velocity = moveDirection * ADEX_FlySpeed
+        ADEX_FlyBodyGyro.CFrame = camCF
+    end)
+
+    ADEX_FlyCharConn = lp.CharacterAdded:Connect(function()
+        if ADEX_FlyToggle then
+            ADEX_FlyToggle.Set(false)
+        end
+    end)
+
+    return true
+end
+
+ADEX_FlyToggle = AddToggle(Visuals, "Fly", "Terbang bebas. WASD/analog + Space/Ctrl.", false, function(enabled)
+    if enabled then
+        local ok = ADEX_StartFly()
+        if not ok then
+            if ADEX_FlyToggle then
+                task.defer(function() if ADEX_FlyToggle then ADEX_FlyToggle.Set(false) end end)
+            end
+        end
+    else
+        ADEX_StopFly()
+    end
+end)
+
+ADEX_FlySpeedSlider = AddSlider(Visuals, "Kecepatan Fly", 10, 500, 50, function(value)
+    ADEX_FlySpeed = value
+end)
+
+ADEX_RegisterCleanup(function()
+    ADEX_StopFly()
+    if ADEX_FlyToggle then pcall(function() ADEX_FlyToggle.Set(false) end) end
+end)
+
 AddSection(PlayerTab, "PENCARI NAMA PLAYER")
 
 AddSection(Settings, "INTERFACE")
