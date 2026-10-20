@@ -892,7 +892,6 @@ local ADEX_FlyConnection = nil
 local ADEX_FlyBodyVelocity = nil
 local ADEX_FlyBodyGyro = nil
 local ADEX_FlyToggle = nil
-local ADEX_FlySpeedSlider = nil
 local ADEX_FlyCharConn = nil
 local ADEX_FlyOriginalPlatformStand = nil
 
@@ -1030,10 +1029,6 @@ ADEX_FlyToggle = AddToggle(Visuals, "Fly", "Terbang bebas. WASD/analog + Space/C
     else
         ADEX_StopFly()
     end
-end)
-
-ADEX_FlySpeedSlider = AddSlider(Visuals, "Kecepatan Fly", 10, 500, 50, function(value)
-    ADEX_FlySpeed = value
 end)
 
 ADEX_RegisterCleanup(function()
