@@ -14,6 +14,8 @@ local prefix = ";"
 local flyConn, flyBV, flyBG, flyHum = nil, nil, nil, nil
 local flyActive = false
 local specConn, specTarget, specBillboard = nil, nil, nil
+local abConn, abActive = nil, false
+local abDisabledParts = {}
 
 local SAVE_FILE = "ADEX_goto_save.json"
 
@@ -165,6 +167,75 @@ local function startSpec(target)
         end
     end)
     print("[ADEX] Spectate:", target.Name)
+end
+
+local function stopAntiBorder()
+    abActive = false
+    if abConn then
+        abConn:Disconnect()
+        abConn = nil
+    end
+    for part in pairs(abDisabledParts) do
+        pcall(function()
+            if part and part.Parent then
+                part.CanCollide = true
+            end
+        end)
+    end
+    abDisabledParts = {}
+end
+
+local function startAntiBorder()
+    if abActive then
+        print("[ADEX] Anti border sudah aktif")
+        return
+    end
+    local char = LP.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then
+        warn("[ADEX] Karakter belum tersedia")
+        return
+    end
+    abActive = true
+    abDisabledParts = {}
+
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+
+    abConn = RunService.Heartbeat:Connect(function()
+        if not abActive then return end
+        local c = LP.Character
+        local h = c and c:FindFirstChild("HumanoidRootPart")
+        if not h then return end
+
+        params.FilterDescendantsInstances = {c}
+        local origin = h.Position
+        local look = h.CFrame.LookVector
+        local right = h.CFrame.RightVector
+        local dirs = {
+            look,
+            -look,
+            right,
+            -right,
+            Vector3.new(0, 1, 0),
+            Vector3.new(0, -1, 0),
+        }
+        if h.Velocity.Magnitude > 1 then
+            table.insert(dirs, h.Velocity.Unit)
+        end
+
+        for _, dir in ipairs(dirs) do
+            local result = workspace:Raycast(origin, dir * 15, params)
+            if result and result.Instance then
+                local part = result.Instance
+                if part.CanCollide and part.Transparency >= 0.99 and not part:IsDescendantOf(c) then
+                    part.CanCollide = false
+                    abDisabledParts[part] = true
+                end
+            end
+        end
+    end)
+    print("[ADEX] Anti border aktif")
 end
 
 local function stopFly()
@@ -329,6 +400,8 @@ local function execute(message)
         print(";spawn - Teleport ke spawn")
         print(";spec <nama> - Spectate player")
         print(";unspec - Berhenti spectate")
+        print(";antiborder - Tembus dinding invisible")
+        print(";noantiborder - Matikan anti border")
         print("========================")
 
     elseif cmd == ";setgoto" then
@@ -434,6 +507,13 @@ local function execute(message)
     elseif cmd == ";unspec" then
         unspec()
         print("[ADEX] Spectate dimatikan")
+
+    elseif cmd == ";antiborder" then
+        startAntiBorder()
+
+    elseif cmd == ";noantiborder" then
+        stopAntiBorder()
+        print("[ADEX] Anti border dimatikan")
 
     else
         warn("[ADEX] Command tidak dikenal:", cmd)
