@@ -94,7 +94,7 @@ local function createSpecBillboard(target)
     if not head then return end
     local bb = Instance.new("BillboardGui")
     bb.Name = "ADEX_SpecName"
-    bb.Size = UDim2.new(0, 110, 0, 28)
+    bb.Size = UDim2.new(0, 80, 0, 20)
     bb.StudsOffset = Vector3.new(0, 2.5, 0)
     bb.AlwaysOnTop = true
     bb.Parent = head
@@ -133,30 +133,36 @@ local function startSpec(target)
     if not target then return end
     local cam = workspace.CurrentCamera
     if not cam then return end
-    cam.CameraType = Enum.CameraType.Scriptable
     specTarget = target
+    cam.CameraType = Enum.CameraType.Custom
+    local function bindSubject()
+        local tChar = target.Character
+        if not tChar then return end
+        local tHum = tChar:FindFirstChildOfClass("Humanoid")
+        if not tHum then return end
+        cam.CameraType = Enum.CameraType.Custom
+        cam.CameraSubject = tHum
+    end
+    bindSubject()
     createSpecBillboard(target)
     specConn = RunService.RenderStepped:Connect(function()
-        if specTarget ~= target then
+        if specTarget ~= target or not target.Parent then
             unspec()
             return
         end
         local tChar = target.Character
-        if not tChar then
+        if not tChar then return end
+        local tHum = tChar:FindFirstChildOfClass("Humanoid")
+        if not tHum or tHum.Health <= 0 then
             unspec()
             return
         end
-        local head = tChar:FindFirstChild("Head") or tChar:FindFirstChild("HumanoidRootPart")
-        local tHum = tChar:FindFirstChildOfClass("Humanoid")
-        if not head or (tHum and tHum.Health <= 0) then
-            unspec()
-            return
+        if cam.CameraSubject ~= tHum then
+            bindSubject()
         end
         if not specBillboard or specBillboard.Parent ~= tChar:FindFirstChild("Head") then
             createSpecBillboard(target)
         end
-        local pos = head.Position - head.CFrame.LookVector * 10 + Vector3.new(0, 5, 0)
-        cam.CFrame = CFrame.lookAt(pos, head.Position)
     end)
     print("[ADEX] Spectate:", target.Name)
 end
