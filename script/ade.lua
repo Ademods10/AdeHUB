@@ -3,10 +3,41 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- ▼▼▼ REMOTE SETTINGS (NEW) — baca settings.json dari GitHub ▼▼▼
+-- ══════════════════════════════════════════════════════════════════════════
+local SETTINGS_BASE = ...
+if type(SETTINGS_BASE) ~= "string" then SETTINGS_BASE = _G.ADEX_SETTINGS_BASE end
+if type(SETTINGS_BASE) ~= "string" then
+    SETTINGS_BASE = "https://raw.githubusercontent.com/Ademods10/AdeHUB/main"
+end
+
+local function httpGet(url)
+    local http = (syn and syn.request) or (http and http.request) or http_request or request
+    if http then
+        local ok, res = pcall(http, {Url = url, Method = "GET"})
+        if ok and res and res.Body then return res.Body end
+    end
+    local ok, res = pcall(function() return game:HttpGet(url) end)
+    if ok and type(res) == "string" then return res end
+    return nil
+end
+
+local RemoteSettings = {}
+pcall(function()
+    local body = httpGet(SETTINGS_BASE .. "/settings.json")
+    if body then
+        local decoded = HttpService:JSONDecode(body)
+        if type(decoded) == "table" then RemoteSettings = decoded end
+    end
+end)
+-- ▲▲▲ END REMOTE SETTINGS ▲▲▲
 
 local CONFIG = {
-    Name = "ADEX HUB",
-    Version = "3.8.1",
+    Name = RemoteSettings.Title or "ADEX HUB",
+    Version = RemoteSettings.Version or "3.8.1",
     Key = Enum.KeyCode.RightShift,
     LoadDuration = 1.8,
     LogoUrl = "rbxassetid://6031075931",
@@ -1168,7 +1199,6 @@ local SavesMemory = {}
 local IndexMemory = {}
 
 local SaveDataEnabled = false
-local AutoSaveEnabled = false
 local AutoLoadEnabled = false
 local LastSaveName = ""
 
@@ -1405,11 +1435,20 @@ local PlayerTab = CreateTab("Player", "●")
 local Settings = CreateTab("Settings", "⚙")
 
 AddSection(Home, "WELCOME")
-AddLabel(Home, "ADEX MODERN HUB", "Compact • Responsive • Android + PC")
+AddLabel(Home, RemoteSettings.Welcome or "ADEX MODERN HUB", RemoteSettings.WelcomeDescription or "Compact • Responsive • Android + PC")
+
+local announcementText = RemoteSettings.Announcement or RemoteSettings.Description
+local announcementTitle = RemoteSettings.AnnouncementTitle or RemoteSettings.DescriptionTitle or "Pengumuman"
+if announcementText and tostring(announcementText) ~= "" then
+    AddLabel(Home, tostring(announcementTitle), tostring(announcementText))
+end
 
 AddSection(Home, "STATUS SCRIPT")
-local StatusCard = AddStatusLabel(Home, "Script Status")
+local StatusCard = AddStatusLabel(Home, RemoteSettings.StatusLabel or "Script Status")
 StatusCard.SetStatus(true)
+if RemoteSettings.Status and RemoteSettings.Status ~= "" then
+    StatusCard.Text.Text = RemoteSettings.Status
+end
 
 AddSection(Visuals, "VISUAL FEATURES")
 AddButton(Visuals, "Refresh", "Refresh fitur.", function()
@@ -2067,7 +2106,7 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
             highlight.FillTransparency = 0.55
             highlight.OutlineTransparency = 0
             highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-            highlight.Parent = generator
+            highlight.Parent = part
 
             -- Pakai Model sebagai adornee → posisi stabil (tidak ikut part beranimasi)
             local billboard = Instance.new("BillboardGui")
@@ -2077,7 +2116,7 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
             billboard.StudsOffset = Vector3.new(0, PERCENT_HEIGHT, 0)
             billboard.AlwaysOnTop = true
             billboard.MaxDistance = MAX_DISTANCE
-            billboard.Parent = generator
+            billboard.Parent = part
 
             local label = Instance.new("TextLabel")
             label.Name = "Percentage"
@@ -2099,7 +2138,7 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
             local valueConn
 
             local function Update()
-                -- Kalau RepairProgress dihapus (umum saat 100%), paksa tampilkan 100%
+                -- Kalau RepairProgress dihapus (umum saat 100%), tampilkan nilai terakhir
                 if not currentProgress or not currentProgress.Parent then
                     local p, s = FindRepairProgress(generator)
                     if p then
@@ -2114,11 +2153,7 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
                             valueConn = currentProgress:GetAttributeChangedSignal(VALUE_NAME):Connect(Update)
                         end
                     else
-                        -- PERBAIKAN: Jika value dihapus (selesai), paksa teks jadi 100% hijau
-                        lastPercent = 100
-                        label.Text = "100%"
-                        label.TextColor3 = Color3.fromRGB(50, 255, 100)
-                        return 
+                        return -- tetap tampilkan lastPercent (mis. 100%)
                     end
                 end
 
@@ -2843,7 +2878,6 @@ AddLabel(Settings, "Keybind", "RightShift = Minimize / Restore")
 AddSection(Settings, "SAVE SYSTEM")
 
 SaveDataEnabled = (ADEX_InitialMeta.SaveData == "true")
-AutoSaveEnabled = (ADEX_InitialMeta.AutoSave == "true")
 AutoLoadEnabled = (ADEX_InitialMeta.AutoLoad == "true")
 LastSaveName = ADEX_InitialMeta.LastSaveName or ""
 
@@ -2851,13 +2885,6 @@ AddToggle(Settings, "Save Data", "Aktifkan fitur simpan data.", SaveDataEnabled,
     SaveDataEnabled = v
     local meta = ReadMetaFile()
     meta.SaveData = tostring(v)
-    WriteMetaFile(meta)
-end, true)
-
-AddToggle(Settings, "Auto Save", "Simpan otomatis saat ada perubahan.", AutoSaveEnabled, function(v)
-    AutoSaveEnabled = v
-    local meta = ReadMetaFile()
-    meta.AutoSave = tostring(v)
     WriteMetaFile(meta)
 end, true)
 
@@ -3889,26 +3916,6 @@ LoadingConnection = RunService.RenderStepped:Connect(function()
     end
 end)
 
-local lastSavedContent = ""
-task.spawn(function()
-    while GUI.Parent do
-        if AutoSaveEnabled and SaveDataEnabled and LastSaveName ~= "" then
-            local ok, content = pcall(SerializeToggles)
-            if ok and content and content ~= "" and content ~= lastSavedContent then
-                local saved = SaveToName(LastSaveName, content)
-                if saved then
-                    lastSavedContent = content
-                    local meta = ReadMetaFile()
-                    meta.LastSaveName = LastSaveName
-                    WriteMetaFile(meta)
-                    print("[ADEX AUTO SAVE] Tersimpan otomatis ke '" .. LastSaveName .. "'")
-                end
-            end
-        end
-        task.wait(1.5)
-    end
-end)
-
 GUI.Destroying:Connect(function()
     if LoadingConnection then
         LoadingConnection:Disconnect()
@@ -3951,4 +3958,40 @@ GUI.Destroying:Connect(function()
     end)
 
     pcall(ADEX_RunAllCleanups)
+end)
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- ▼▼▼ MODULE LOADER (NEW) — load script/Nama1.lua, Nama2.lua, dll ▼▼▼
+-- ══════════════════════════════════════════════════════════════════════════
+task.defer(function()
+    if type(RemoteSettings.Modules) ~= "table" then return end
+    for _, modName in ipairs(RemoteSettings.Modules) do
+        if type(modName) == "string" and modName ~= "" then
+            task.spawn(function()
+                local ok, err = pcall(function()
+                    local url = SETTINGS_BASE .. "/script/" .. modName .. ".lua"
+                    local body = httpGet(url)
+                    if not body then
+                        warn("[ADEX MODULE] Gagal fetch: " .. modName)
+                        return
+                    end
+                    local loader = loadstring or load
+                    if not loader then
+                        warn("[ADEX MODULE] loadstring/load tidak tersedia: " .. modName)
+                        return
+                    end
+                    local fn = loader(body)
+                    if fn then
+                        print("[ADEX MODULE] Loaded: " .. modName)
+                        fn()
+                    else
+                        warn("[ADEX MODULE] Gagal compile: " .. modName)
+                    end
+                end)
+                if not ok then
+                    warn("[ADEX MODULE] Error loading " .. tostring(modName) .. ": " .. tostring(err))
+                end
+            end)
+        end
+    end
 end)
