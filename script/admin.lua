@@ -19,8 +19,260 @@ local abConn, abActive = nil, false
 local abDisabledParts = {}
 local fbSaved = nil
 local fbActive = false
+local adminGui, adminListFrame = nil, nil
 
 local SAVE_FILE = "ADEX_goto_save.json"
+local ADMIN_FILE = "admin.json"
+
+-- URL RAW admins.json di repo AdeHUB (root repo)
+-- Jika kamu menaruh admins.json di dalam folder script, ganti menjadi:
+-- https://raw.githubusercontent.com/Ademods10/AdeHUB/main/script/admins.json
+local ADMIN_URL = "https://raw.githubusercontent.com/Ademods10/AdeHUB/main/admins.json"
+
+local admins = {}
+
+local function fetchGitHub(url)
+    if not url or url == "" then
+        return nil
+    end
+    -- Method 1: request (executor-specific)
+    if type(request) == "function" then
+        local ok, res = pcall(function()
+            return request({ Url = url, Method = "GET" })
+        end)
+        if ok and res and (res.Body or res.body) then
+            return res.Body or res.body
+        end
+    end
+    -- Method 2: http_request
+    if type(http_request) == "function" then
+        local ok, res = pcall(function()
+            return http_request({ Url = url, Method = "GET" })
+        end)
+        if ok and res and (res.Body or res.body) then
+            return res.Body or res.body
+        end
+    end
+    -- Method 3: syn.request
+    if syn and type(syn.request) == "function" then
+        local ok, res = pcall(function()
+            return syn.request({ Url = url, Method = "GET" })
+        end)
+        if ok and res and (res.Body or res.body) then
+            return res.Body or res.body
+        end
+    end
+    -- Fallback: HttpService
+    local ok2, res2 = pcall(function()
+        return HttpService:GetAsync(url)
+    end)
+    if ok2 and res2 and res2 ~= "" then
+        return res2
+    end
+    return nil
+end
+
+local function writeLocalAdmins(list)
+    if type(writefile) ~= "function" then return end
+    pcall(function()
+        writefile(ADMIN_FILE, HttpService:JSONEncode(list))
+    end)
+end
+
+local function loadAdmins()
+    local defaults = { LP.Name }
+    local content = fetchGitHub(ADMIN_URL)
+    local source = "GitHub"
+
+    if not content or content == "" then
+        source = "local"
+        if type(readfile) == "function" then
+            local ok, localContent = pcall(readfile, ADMIN_FILE)
+            if ok and localContent and localContent ~= "" then
+                content = localContent
+            end
+        end
+    end
+
+    if not content or content == "" then
+        admins = defaults
+        writeLocalAdmins(defaults)
+        print("[ADEX] Admin: pakai default (" .. LP.Name .. ")")
+        return
+    end
+
+    local ok2, data = pcall(function()
+        return HttpService:JSONDecode(content)
+    end)
+
+    if not ok2 or type(data) ~= "table" or #data == 0 then
+        admins = defaults
+        print("[ADEX] Admin JSON tidak valid, pakai default:", LP.Name)
+        return
+    end
+
+    admins = data
+    if source == "local" then
+        writeLocalAdmins(data)
+    end
+    print("[ADEX] Admin dimuat dari " .. source .. ":", #admins)
+end
+
+loadAdmins()
+
+local function isAdmin(player)
+    if not player then return false end
+    local lname = player.Name:lower()
+    for _, a in ipairs(admins) do
+        if type(a) == "string" and a:lower() == lname then
+            return true
+        end
+    end
+    return false
+end
+
+local function isPlayerOnline(name)
+    if not name then return false end
+    local lname = name:lower()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Name:lower() == lname then
+            return true
+        end
+    end
+    return false
+end
+
+if isAdmin(LP) then
+    print("[ADEX] Kamu adalah admin ✓")
+else
+    warn("[ADEX] Kamu BUKAN admin! Tidak bisa pakai command.")
+    warn("[ADEX] Tambahkan '" .. LP.Name .. "' ke admins.json di GitHub.")
+end
+
+local function refreshAdminGUI()
+    if not adminGui or not adminGui.Parent or not adminListFrame then return end
+    for _, c in ipairs(adminListFrame:GetChildren()) do
+        if c:IsA("Frame") then
+            c:Destroy()
+        end
+    end
+    local y = 0
+    for _, a in ipairs(admins) do
+        if type(a) == "string" then
+            local row = Instance.new("Frame")
+            row.Size = UDim2.new(1, -8, 0, 28)
+            row.Position = UDim2.new(0, 4, 0, y)
+            row.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+            row.BackgroundTransparency = 0.3
+            row.BorderSizePixel = 0
+            row.Parent = adminListFrame
+
+            local nameLabel = Instance.new("TextLabel")
+            nameLabel.Size = UDim2.new(0.6, -4, 1, 0)
+            nameLabel.Position = UDim2.new(0, 8, 0, 0)
+            nameLabel.BackgroundTransparency = 1
+            nameLabel.Text = a
+            nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            nameLabel.Font = Enum.Font.SourceSans
+            nameLabel.TextSize = 16
+            nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+            nameLabel.Parent = row
+
+            local statusLabel = Instance.new("TextLabel")
+            statusLabel.Size = UDim2.new(0.4, -8, 1, 0)
+            statusLabel.Position = UDim2.new(0.6, 0, 0, 0)
+            statusLabel.BackgroundTransparency = 1
+            statusLabel.Font = Enum.Font.SourceSansBold
+            statusLabel.TextSize = 16
+            statusLabel.TextXAlignment = Enum.TextXAlignment.Right
+            statusLabel.Parent = row
+
+            if isPlayerOnline(a) then
+                statusLabel.Text = "Online"
+                statusLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+            else
+                statusLabel.Text = "Offline"
+                statusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+            end
+            y = y + 32
+        end
+    end
+    adminListFrame.CanvasSize = UDim2.new(0, 0, 0, y)
+end
+
+local function openAdminGUI()
+    if adminGui and adminGui.Parent then
+        adminGui:Destroy()
+        adminGui = nil
+        adminListFrame = nil
+        return
+    end
+
+    adminGui = Instance.new("ScreenGui")
+    adminGui.Name = "ADEX_AdminList"
+    adminGui.ResetOnSpawn = false
+    adminGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    adminGui.Parent = LP:WaitForChild("PlayerGui")
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 320, 0, 360)
+    frame.AnchorPoint = Vector2.new(0.5, 0.5)
+    frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    frame.BorderSizePixel = 0
+    frame.Active = true
+    frame.Draggable = true
+    frame.Parent = adminGui
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -50, 0, 36)
+    title.BackgroundTransparency = 1
+    title.Text = "ADEX ADMINS (" .. #admins .. ")"
+    title.TextColor3 = Color3.fromRGB(0, 255, 170)
+    title.Font = Enum.Font.SourceSansBold
+    title.TextSize = 20
+    title.Parent = frame
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.new(0, 30, 0, 30)
+    closeBtn.Position = UDim2.new(1, -35, 0, 3)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
+    closeBtn.BorderSizePixel = 0
+    closeBtn.Text = "X"
+    closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    closeBtn.Font = Enum.Font.SourceSansBold
+    closeBtn.TextSize = 18
+    closeBtn.Parent = frame
+
+    local list = Instance.new("ScrollingFrame")
+    list.Size = UDim2.new(1, -12, 1, -46)
+    list.Position = UDim2.new(0, 6, 0, 42)
+    list.BackgroundTransparency = 1
+    list.BorderSizePixel = 0
+    list.ScrollBarThickness = 6
+    list.CanvasSize = UDim2.new(0, 0, 0, 0)
+    list.Parent = frame
+
+    adminListFrame = list
+
+    closeBtn.MouseButton1Click:Connect(function()
+        if adminGui then
+            adminGui:Destroy()
+            adminGui = nil
+            adminListFrame = nil
+        end
+    end)
+
+    refreshAdminGUI()
+end
+
+Players.PlayerAdded:Connect(function()
+    refreshAdminGUI()
+end)
+
+Players.PlayerRemoving:Connect(function()
+    refreshAdminGUI()
+end)
 
 local function encodeCFrame(cf)
     local x, y, z, r00, r01, r02, r10, r11, r12, r20, r21, r22 = cf:GetComponents()
@@ -525,6 +777,11 @@ local function execute(message)
         return
     end
 
+    if not isAdmin(LP) then
+        warn("[ADEX] Kamu bukan admin. Command ditolak.")
+        return
+    end
+
     local args = {}
     for word in message:gmatch("%S+") do
         table.insert(args, word)
@@ -536,6 +793,8 @@ local function execute(message)
     if cmd == ";cmds" then
         print("===== ADEX CHAT CMD =====")
         print(";cmds - Daftar command")
+        print(";admins / ;admin - Tampilkan list admin")
+        print(";reloadadmins - Refresh admin dari GitHub")
         print(";setgoto <nama> - Simpan lokasi")
         print(";goto <nama> - Teleport ke lokasi tersimpan")
         print(";fly - Aktifkan fly")
@@ -553,6 +812,14 @@ local function execute(message)
         print(";fullbright - Mencerahkan tampilan lokal")
         print(";unbright - Memulihkan pencahayaan")
         print("========================")
+
+    elseif cmd == ";admins" or cmd == ";admin" then
+        openAdminGUI()
+
+    elseif cmd == ";reloadadmins" then
+        loadAdmins()
+        refreshAdminGUI()
+        print("[ADEX] Admin reload selesai")
 
     elseif cmd == ";setgoto" then
         if not name then
