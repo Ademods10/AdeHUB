@@ -22,7 +22,7 @@ local fbActive = false
 local adminGui, adminListFrame = nil, nil
 
 local SAVE_FILE = "ADEX_goto_save.json"
-local ADMIN_FILE = "admin.json"
+local ADMIN_FILE = "ADEX_admin_cache.json"
 
 -- URL RAW admins.json di repo AdeHUB (root repo)
 -- Jika kamu menaruh admins.json di dalam folder script, ganti menjadi:
@@ -80,7 +80,7 @@ local function writeLocalAdmins(list)
 end
 
 local function loadAdmins()
-    local defaults = { LP.Name }
+    local defaults = {}
     local content = fetchGitHub(ADMIN_URL)
     local source = "GitHub"
 
@@ -97,7 +97,7 @@ local function loadAdmins()
     if not content or content == "" then
         admins = defaults
         writeLocalAdmins(defaults)
-        print("[ADEX] Admin: pakai default (" .. LP.Name .. ")")
+        print("[ADEX] Admin kosong (GitHub tidak tersedia)")
         return
     end
 
@@ -107,7 +107,7 @@ local function loadAdmins()
 
     if not ok2 or type(data) ~= "table" or #data == 0 then
         admins = defaults
-        print("[ADEX] Admin JSON tidak valid, pakai default:", LP.Name)
+        print("[ADEX] Admin JSON tidak valid atau kosong")
         return
     end
 
