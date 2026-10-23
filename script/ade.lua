@@ -2067,7 +2067,7 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
             highlight.FillTransparency = 0.55
             highlight.OutlineTransparency = 0
             highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-            highlight.Parent = generator -- Diubah ke generator agar tidak hilang saat part dihancurkan
+            highlight.Parent = generator
 
             -- Pakai Model sebagai adornee → posisi stabil (tidak ikut part beranimasi)
             local billboard = Instance.new("BillboardGui")
@@ -2077,7 +2077,7 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
             billboard.StudsOffset = Vector3.new(0, PERCENT_HEIGHT, 0)
             billboard.AlwaysOnTop = true
             billboard.MaxDistance = MAX_DISTANCE
-            billboard.Parent = generator -- Diubah ke generator
+            billboard.Parent = generator
 
             local label = Instance.new("TextLabel")
             label.Name = "Percentage"
@@ -2114,10 +2114,11 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
                             valueConn = currentProgress:GetAttributeChangedSignal(VALUE_NAME):Connect(Update)
                         end
                     else
+                        -- PERBAIKAN: Jika value dihapus (selesai), paksa teks jadi 100% hijau
                         lastPercent = 100
                         label.Text = "100%"
                         label.TextColor3 = Color3.fromRGB(50, 255, 100)
-                        return
+                        return 
                     end
                 end
 
