@@ -8,6 +8,7 @@ local LP = Players.LocalPlayer
 local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
 
 local savedLocations = {}
 local prefix = ";"
@@ -166,7 +167,7 @@ local function startSpec(target)
             createSpecBillboard(target)
         end
     end)
-    print("[ADEX] Spectate:", target.Name)
+    print("[ADEX] View:", target.Name)
 end
 
 local function stopAntiBorder()
@@ -375,6 +376,35 @@ local function startFly()
     print("[ADEX] Fly aktif")
 end
 
+local function doRejoin()
+    print("[ADEX] Rejoin...")
+    pcall(function()
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LP)
+    end)
+end
+
+local function doReset()
+    local char = LP.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.Health = 0
+        print("[ADEX] Reset karakter")
+    else
+        warn("[ADEX] Humanoid tidak ditemukan")
+    end
+end
+
+local function doSit()
+    local char = LP.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.Sit = true
+        print("[ADEX] Duduk")
+    else
+        warn("[ADEX] Humanoid tidak ditemukan")
+    end
+end
+
 local function execute(message)
     if message:sub(1, 1) ~= prefix then
         return
@@ -398,10 +428,13 @@ local function execute(message)
         print(";to <nama> - Teleport ke player")
         print(";bring <nama> - Tarik player ke kamu")
         print(";spawn - Teleport ke spawn")
-        print(";spec <nama> - Spectate player")
-        print(";unspec - Berhenti spectate")
+        print(";view <nama> - Lihat player")
+        print(";unview - Berhenti lihat player")
         print(";antiborder - Tembus dinding invisible")
         print(";noantiborder - Matikan anti border")
+        print(";rejoin - Rejoin server")
+        print(";reset / ;re - Reset karakter")
+        print(";sit - Duduk")
         print("========================")
 
     elseif cmd == ";setgoto" then
@@ -496,7 +529,7 @@ local function execute(message)
             warn("[ADEX] SpawnLocation tidak ditemukan")
         end
 
-    elseif cmd == ";spec" then
+    elseif cmd == ";view" then
         local target = findPlayer(name)
         if not target then
             warn("[ADEX] Pemain tidak ditemukan")
@@ -504,9 +537,9 @@ local function execute(message)
         end
         startSpec(target)
 
-    elseif cmd == ";unspec" then
+    elseif cmd == ";unview" then
         unspec()
-        print("[ADEX] Spectate dimatikan")
+        print("[ADEX] View dimatikan")
 
     elseif cmd == ";antiborder" then
         startAntiBorder()
@@ -514,6 +547,15 @@ local function execute(message)
     elseif cmd == ";noantiborder" then
         stopAntiBorder()
         print("[ADEX] Anti border dimatikan")
+
+    elseif cmd == ";rejoin" then
+        doRejoin()
+
+    elseif cmd == ";reset" or cmd == ";re" then
+        doReset()
+
+    elseif cmd == ";sit" then
+        doSit()
 
     else
         warn("[ADEX] Command tidak dikenal:", cmd)
