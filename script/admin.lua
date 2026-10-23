@@ -17,6 +17,8 @@ local flyActive = false
 local specConn, specTarget, specBillboard = nil, nil, nil
 local abConn, abActive = nil, false
 local abDisabledParts = {}
+local fbSaved = nil
+local fbActive = false
 
 local SAVE_FILE = "ADEX_goto_save.json"
 
@@ -405,6 +407,119 @@ local function doSit()
     end
 end
 
+local function doFullbright()
+    if fbActive then
+        print("[ADEX] Fullbright sudah aktif")
+        return
+    end
+    local Lighting = game:GetService("Lighting")
+    fbSaved = {}
+    local props = {
+        "Ambient",
+        "OutdoorAmbient",
+        "Brightness",
+        "ClockTime",
+        "FogEnd",
+        "FogStart",
+        "GlobalShadows",
+        "EnvironmentDiffuseScale",
+        "EnvironmentSpecularScale",
+        "ShadowSoftness",
+        "ExposureCompensation",
+    }
+    for _, prop in ipairs(props) do
+        local ok, val = pcall(function()
+            return Lighting[prop]
+        end)
+        if ok then
+            fbSaved[prop] = val
+        end
+    end
+    local atmosphereSaved = nil
+    for _, obj in ipairs(Lighting:GetChildren()) do
+        if obj:IsA("Atmosphere") then
+            atmosphereSaved = {
+                obj = obj,
+                Density = obj.Density,
+                Haze = obj.Haze,
+                Glare = obj.Glare,
+            }
+        end
+        if obj:IsA("BloomEffect") then
+            obj.Enabled = false
+        end
+        if obj:IsA("BlurEffect") then
+            obj.Enabled = false
+        end
+        if obj:IsA("SunRaysEffect") then
+            obj.Enabled = false
+        end
+        if obj:IsA("ColorCorrectionEffect") then
+            obj.Enabled = false
+        end
+        if obj:IsA("DepthOfFieldEffect") then
+            obj.Enabled = false
+        end
+    end
+    fbSaved.Atmosphere = atmosphereSaved
+
+    Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+    Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+    Lighting.Brightness = 3
+    Lighting.ClockTime = 14
+    Lighting.FogEnd = 100000
+    Lighting.FogStart = 0
+    Lighting.GlobalShadows = false
+    pcall(function()
+        Lighting.EnvironmentDiffuseScale = 1
+        Lighting.EnvironmentSpecularScale = 1
+    end)
+    if atmosphereSaved and atmosphereSaved.obj then
+        pcall(function()
+            atmosphereSaved.obj.Density = 0
+            atmosphereSaved.obj.Haze = 0
+            atmosphereSaved.obj.Glare = 0
+        end)
+    end
+    fbActive = true
+    print("[ADEX] Fullbright aktif")
+end
+
+local function doUnbright()
+    if not fbActive or not fbSaved then
+        print("[ADEX] Fullbright tidak aktif")
+        return
+    end
+    local Lighting = game:GetService("Lighting")
+    for prop, val in pairs(fbSaved) do
+        if prop ~= "Atmosphere" then
+            pcall(function()
+                Lighting[prop] = val
+            end)
+        end
+    end
+    local atm = fbSaved.Atmosphere
+    if atm and atm.obj and atm.obj.Parent then
+        pcall(function()
+            atm.obj.Density = atm.Density
+            atm.obj.Haze = atm.Haze
+            atm.obj.Glare = atm.Glare
+        end)
+    end
+    for _, obj in ipairs(Lighting:GetChildren()) do
+        if obj:IsA("BloomEffect")
+            or obj:IsA("BlurEffect")
+            or obj:IsA("SunRaysEffect")
+            or obj:IsA("ColorCorrectionEffect")
+            or obj:IsA("DepthOfFieldEffect") then
+            obj.Enabled = true
+        end
+    end
+    fbSaved = nil
+    fbActive = false
+    print("[ADEX] Fullbright dimatikan")
+end
+
 local function execute(message)
     if message:sub(1, 1) ~= prefix then
         return
@@ -435,6 +550,8 @@ local function execute(message)
         print(";rejoin - Rejoin server")
         print(";reset / ;re - Reset karakter")
         print(";sit - Duduk")
+        print(";fullbright - Mencerahkan tampilan lokal")
+        print(";unbright - Memulihkan pencahayaan")
         print("========================")
 
     elseif cmd == ";setgoto" then
@@ -556,6 +673,12 @@ local function execute(message)
 
     elseif cmd == ";sit" then
         doSit()
+
+    elseif cmd == ";fullbright" then
+        doFullbright()
+
+    elseif cmd == ";unbright" then
+        doUnbright()
 
     else
         warn("[ADEX] Command tidak dikenal:", cmd)
