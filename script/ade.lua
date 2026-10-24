@@ -1990,11 +1990,22 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
             return math.clamp(math.floor(value + 0.5), 0, 100)
         end
 
+        -- Perbaikan: prefer part yang benar-benar terlihat (Transparency < 1)
+        -- supaya highlight tidak menempel pada collision box / hitbox transparan.
         local function GetPart(generator)
             if generator:IsA("BasePart") then
                 return generator
             end
             if generator:IsA("Model") then
+                local primary = generator.PrimaryPart
+                if primary and primary:IsA("BasePart") and primary.Transparency < 1 then
+                    return primary
+                end
+                for _, obj in ipairs(generator:GetDescendants()) do
+                    if obj:IsA("BasePart") and obj.Transparency < 1 then
+                        return obj
+                    end
+                end
                 return generator.PrimaryPart
                     or generator:FindFirstChildWhichIsA("BasePart", true)
             end
@@ -2058,15 +2069,22 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
                 return
             end
 
+            -- ==== PERBAIKAN HIGHLIGHT ESP GENERATOR ====
+            -- 1) Adornee di-set ke `part` (part visible utama) supaya outline
+            --    tidak ikut menggambar collision box / hitbox transparan yang
+            --    biasanya ada di dalam Model Generator.
+            -- 2) Parent di-set ke `generator` (Model / BasePart) supaya
+            --    Highlight & Billboard tetap hidup walau part dalam generator
+            --    beranimasi / di-reparent / di-replace.
             local highlight = Instance.new("Highlight")
             highlight.Name = "ADEX_GeneratorESP"
-            highlight.Adornee = generator
+            highlight.Adornee = part
             highlight.FillColor = Color3.fromRGB(255, 190, 0)
             highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
             highlight.FillTransparency = 0.55
             highlight.OutlineTransparency = 0
             highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-            highlight.Parent = part
+            highlight.Parent = generator
 
             -- Pakai Model sebagai adornee → posisi stabil (tidak ikut part beranimasi)
             local billboard = Instance.new("BillboardGui")
@@ -2076,7 +2094,7 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
             billboard.StudsOffset = Vector3.new(0, PERCENT_HEIGHT, 0)
             billboard.AlwaysOnTop = true
             billboard.MaxDistance = MAX_DISTANCE
-            billboard.Parent = part
+            billboard.Parent = generator
 
             local label = Instance.new("TextLabel")
             label.Name = "Percentage"
