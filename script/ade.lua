@@ -1982,23 +1982,12 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
         local MAX_DISTANCE = 1000
         local VALUE_NAME = "RepairProgress"
         local PERCENT_TEXT_SIZE = 14
-        local PERCENT_HEIGHT = 4
+        local PERCENT_HEIGHT = 2.2 -- Diturunkan dari 4 ke 2.2 agar teks lebih dekat ke generator
 
         local function FormatPercent(value)
             value = tonumber(value)
             if not value then return nil end
             return math.clamp(math.floor(value + 0.5), 0, 100)
-        end
-
-        local function GetPart(generator)
-            if generator:IsA("BasePart") then
-                return generator
-            end
-            if generator:IsA("Model") then
-                return generator.PrimaryPart
-                    or generator:FindFirstChildWhichIsA("BasePart", true)
-            end
-            return nil
         end
 
         local function FindRepairProgress(generator)
@@ -2023,13 +2012,19 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
         local function CreateESP(generator)
             if not generator or not generator.Parent then return end
 
-            local part = GetPart(generator)
-            if not part then return end
-
             -- Dedup recursive (cek seluruh hierarki generator)
             if generator:FindFirstChild("ADEX_GeneratorESP", true)
                 or generator:FindFirstChild("ADEX_GeneratorPercent", true) then
                 return
+            end
+
+            -- Cek parent di atasnya untuk mencegah duplikasi (misal part bernama Generator di dalam Model Generator)
+            local checkParent = generator.Parent
+            while checkParent and checkParent ~= Workspace do
+                if checkParent.Name == "Generator" and checkParent:FindFirstChild("ADEX_GeneratorESP", true) then
+                    return
+                end
+                checkParent = checkParent.Parent
             end
 
             local progress, source = FindRepairProgress(generator)
@@ -2066,9 +2061,8 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
             highlight.FillTransparency = 0.55
             highlight.OutlineTransparency = 0
             highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-            highlight.Parent = part
+            highlight.Parent = generator -- Parent ke generator langsung agar stabil
 
-            -- Pakai Model sebagai adornee → posisi stabil (tidak ikut part beranimasi)
             local billboard = Instance.new("BillboardGui")
             billboard.Name = "ADEX_GeneratorPercent"
             billboard.Adornee = generator
@@ -2076,7 +2070,7 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
             billboard.StudsOffset = Vector3.new(0, PERCENT_HEIGHT, 0)
             billboard.AlwaysOnTop = true
             billboard.MaxDistance = MAX_DISTANCE
-            billboard.Parent = part
+            billboard.Parent = generator -- Parent ke generator langsung
 
             local label = Instance.new("TextLabel")
             label.Name = "Percentage"
