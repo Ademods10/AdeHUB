@@ -3,41 +3,10 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
-
--- ══════════════════════════════════════════════════════════════════════════
--- ▼▼▼ REMOTE SETTINGS (NEW) — baca settings.json dari GitHub ▼▼▼
--- ══════════════════════════════════════════════════════════════════════════
-local SETTINGS_BASE = ...
-if type(SETTINGS_BASE) ~= "string" then SETTINGS_BASE = _G.ADEX_SETTINGS_BASE end
-if type(SETTINGS_BASE) ~= "string" then
-    SETTINGS_BASE = "https://raw.githubusercontent.com/Ademods10/AdeHUB/main"
-end
-
-local function httpGet(url)
-    local http = (syn and syn.request) or (http and http.request) or http_request or request
-    if http then
-        local ok, res = pcall(http, {Url = url, Method = "GET"})
-        if ok and res and res.Body then return res.Body end
-    end
-    local ok, res = pcall(function() return game:HttpGet(url) end)
-    if ok and type(res) == "string" then return res end
-    return nil
-end
-
-local RemoteSettings = {}
-pcall(function()
-    local body = httpGet(SETTINGS_BASE .. "/settings.json")
-    if body then
-        local decoded = HttpService:JSONDecode(body)
-        if type(decoded) == "table" then RemoteSettings = decoded end
-    end
-end)
--- ▲▲▲ END REMOTE SETTINGS ▲▲▲
 
 local CONFIG = {
-    Name = RemoteSettings.Title or "ADEX HUB",
-    Version = RemoteSettings.Version or "3.8.1",
+    Name = "ADEX HUB",
+    Version = "3.8.1",
     Key = Enum.KeyCode.RightShift,
     LoadDuration = 1.8,
     LogoUrl = "rbxassetid://6031075931",
@@ -82,6 +51,7 @@ pcall(function() RunService:UnbindFromRenderStep("ADEX_NicknameKiller") end)
 pcall(function() RunService:UnbindFromRenderStep("ADEX_CrosshairKiller") end)
 pcall(function() RunService:UnbindFromRenderStep("ADEX_GeneratorKiller") end)
 pcall(function() RunService:UnbindFromRenderStep("ADEX_AutoGenKiller") end)
+pcall(function() RunService:UnbindFromRenderStep("ADEX_HalloweenKiller") end)
 
 pcall(function()
     local old = CoreGui:FindFirstChild("ADEX_MODERN_HUB")
@@ -1199,6 +1169,7 @@ local SavesMemory = {}
 local IndexMemory = {}
 
 local SaveDataEnabled = false
+local AutoSaveEnabled = false
 local AutoLoadEnabled = false
 local LastSaveName = ""
 
@@ -1435,20 +1406,11 @@ local PlayerTab = CreateTab("Player", "●")
 local Settings = CreateTab("Settings", "⚙")
 
 AddSection(Home, "WELCOME")
-AddLabel(Home, RemoteSettings.Welcome or "ADEX MODERN HUB", RemoteSettings.WelcomeDescription or "Compact • Responsive • Android + PC")
-
-local announcementText = RemoteSettings.Announcement or RemoteSettings.Description
-local announcementTitle = RemoteSettings.AnnouncementTitle or RemoteSettings.DescriptionTitle or "Pengumuman"
-if announcementText and tostring(announcementText) ~= "" then
-    AddLabel(Home, tostring(announcementTitle), tostring(announcementText))
-end
+AddLabel(Home, "ADEX MODERN HUB", "Compact • Responsive • Android + PC")
 
 AddSection(Home, "STATUS SCRIPT")
-local StatusCard = AddStatusLabel(Home, RemoteSettings.StatusLabel or "Script Status")
+local StatusCard = AddStatusLabel(Home, "Script Status")
 StatusCard.SetStatus(true)
-if RemoteSettings.Status and RemoteSettings.Status ~= "" then
-    StatusCard.Text.Text = RemoteSettings.Status
-end
 
 AddSection(Visuals, "VISUAL FEATURES")
 AddButton(Visuals, "Refresh", "Refresh fitur.", function()
@@ -2007,6 +1969,112 @@ ADEX_NicknameToggle = AddToggle(Visuals, "Esp Nickname", "Nama pemain • Small 
     end
 end)
 
+-- ══════════════════════════════════════════════════════════════════════════
+-- ▼▼▼ FITUR BARU: ESP LABU (HALLOWEEN) ▼▼▼
+-- ══════════════════════════════════════════════════════════════════════════
+local ADEX_HalloweenLoaded = false
+local ADEX_HalloweenEnabled = false
+local ADEX_HalloweenToggle = nil
+
+ADEX_HalloweenToggle = AddToggle(Visuals, "Esp Labu (Halloween)", "Highlight lokasi Pumpkin/Labu.", false, function(enabled)
+    ADEX_HalloweenEnabled = enabled
+
+    if enabled and not ADEX_HalloweenLoaded then
+        ADEX_HalloweenLoaded = true
+
+        local Workspace = game:GetService("Workspace")
+        local MAX_DISTANCE = 1000
+        local HIGHLIGHT_COLOR = Color3.fromRGB(255, 140, 0)
+
+        local function GetPart(obj)
+            if obj:IsA("BasePart") then return obj end
+            if obj:IsA("Model") then return obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart", true) end
+            return nil
+        end
+
+        local function CreatePumpkinESP(obj)
+            if not obj or not obj.Parent then return end
+            local part = GetPart(obj)
+            if not part then return end
+
+            if obj:FindFirstChild("ADEX_PumpkinESP", true) then return end
+
+            local highlight = Instance.new("Highlight")
+            highlight.Name = "ADEX_PumpkinESP"
+            highlight.Adornee = obj
+            highlight.FillColor = HIGHLIGHT_COLOR
+            highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+            highlight.FillTransparency = 0.5
+            highlight.OutlineTransparency = 0
+            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            highlight.Parent = obj
+
+            local billboard = Instance.new("BillboardGui")
+            billboard.Name = "ADEX_PumpkinBillboard"
+            billboard.Adornee = obj
+            billboard.Size = UDim2.fromOffset(150, 30)
+            billboard.StudsOffset = Vector3.new(0, 3, 0)
+            billboard.AlwaysOnTop = true
+            billboard.MaxDistance = MAX_DISTANCE
+            billboard.Parent = obj
+
+            local label = Instance.new("TextLabel")
+            label.Size = UDim2.fromScale(1, 1)
+            label.BackgroundTransparency = 1
+            label.Text = "🎃 PUMPKIN 🎃"
+            label.TextSize = 16
+            label.Font = Enum.Font.GothamBold
+            label.TextColor3 = HIGHLIGHT_COLOR
+            label.TextStrokeTransparency = 0
+            label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+            label.Parent = billboard
+        end
+
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj.Name:lower():find("pumpkin") or obj.Name:lower():find("labu") then
+                CreatePumpkinESP(obj)
+            end
+        end
+
+        Workspace.DescendantAdded:Connect(function(obj)
+            if not ADEX_HalloweenEnabled then return end
+            if obj.Name:lower():find("pumpkin") or obj.Name:lower():find("labu") then
+                task.wait(0.2)
+                CreatePumpkinESP(obj)
+            end
+        end)
+
+        pcall(function()
+            RunService:UnbindFromRenderStep("ADEX_HalloweenKiller")
+        end)
+        pcall(function()
+            RunService:BindToRenderStep("ADEX_HalloweenKiller", Enum.RenderPriority.Last.Value, function()
+                if not GUI or not GUI.Parent then
+                    pcall(function() RunService:UnbindFromRenderStep("ADEX_HalloweenKiller") end)
+                    return
+                end
+                if ADEX_HalloweenEnabled then return end
+                for _, obj in ipairs(Workspace:GetDescendants()) do
+                    if obj.Name == "ADEX_PumpkinESP" or obj.Name == "ADEX_PumpkinBillboard" then
+                        obj:Destroy()
+                    end
+                end
+            end)
+        end)
+
+        ADEX_RegisterCleanup(function()
+            if ADEX_HalloweenToggle then ADEX_HalloweenToggle.Set(false) end
+            ADEX_HalloweenEnabled = false
+            for _, obj in ipairs(Workspace:GetDescendants()) do
+                if obj.Name == "ADEX_PumpkinESP" or obj.Name == "ADEX_PumpkinBillboard" then
+                    pcall(function() obj:Destroy() end)
+                end
+            end
+        end)
+    end
+end)
+-- ══════════════════════════════════════════════════════════════════════════
+
 local ADEX_GeneratorLoaded = false
 local ADEX_GeneratorEnabled = false
 local ADEX_GeneratorToggle = nil
@@ -2106,7 +2174,7 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
             highlight.FillTransparency = 0.55
             highlight.OutlineTransparency = 0
             highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-            highlight.Parent = part
+            highlight.Parent = generator -- Diubah ke generator
 
             -- Pakai Model sebagai adornee → posisi stabil (tidak ikut part beranimasi)
             local billboard = Instance.new("BillboardGui")
@@ -2116,7 +2184,7 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
             billboard.StudsOffset = Vector3.new(0, PERCENT_HEIGHT, 0)
             billboard.AlwaysOnTop = true
             billboard.MaxDistance = MAX_DISTANCE
-            billboard.Parent = part
+            billboard.Parent = generator -- Diubah ke generator
 
             local label = Instance.new("TextLabel")
             label.Name = "Percentage"
@@ -2138,7 +2206,7 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
             local valueConn
 
             local function Update()
-                -- Kalau RepairProgress dihapus (umum saat 100%), tampilkan nilai terakhir
+                -- Kalau RepairProgress dihapus (umum saat 100%), paksa tampilkan 100%
                 if not currentProgress or not currentProgress.Parent then
                     local p, s = FindRepairProgress(generator)
                     if p then
@@ -2153,7 +2221,11 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
                             valueConn = currentProgress:GetAttributeChangedSignal(VALUE_NAME):Connect(Update)
                         end
                     else
-                        return -- tetap tampilkan lastPercent (mis. 100%)
+                        -- PERBAIKAN: Jika value dihapus (selesai), paksa teks jadi 100% hijau
+                        lastPercent = 100
+                        label.Text = "100%"
+                        label.TextColor3 = Color3.fromRGB(50, 255, 100)
+                        return 
                     end
                 end
 
@@ -2878,6 +2950,7 @@ AddLabel(Settings, "Keybind", "RightShift = Minimize / Restore")
 AddSection(Settings, "SAVE SYSTEM")
 
 SaveDataEnabled = (ADEX_InitialMeta.SaveData == "true")
+AutoSaveEnabled = (ADEX_InitialMeta.AutoSave == "true")
 AutoLoadEnabled = (ADEX_InitialMeta.AutoLoad == "true")
 LastSaveName = ADEX_InitialMeta.LastSaveName or ""
 
@@ -2885,6 +2958,13 @@ AddToggle(Settings, "Save Data", "Aktifkan fitur simpan data.", SaveDataEnabled,
     SaveDataEnabled = v
     local meta = ReadMetaFile()
     meta.SaveData = tostring(v)
+    WriteMetaFile(meta)
+end, true)
+
+AddToggle(Settings, "Auto Save", "Simpan otomatis saat ada perubahan.", AutoSaveEnabled, function(v)
+    AutoSaveEnabled = v
+    local meta = ReadMetaFile()
+    meta.AutoSave = tostring(v)
     WriteMetaFile(meta)
 end, true)
 
@@ -3916,6 +3996,30 @@ LoadingConnection = RunService.RenderStepped:Connect(function()
     end
 end)
 
+-- ══════════════════════════════════════════════════════════════════════════
+-- ▼▼▼ FIX: LOOP AUTO SAVE ▼▼▼
+-- ══════════════════════════════════════════════════════════════════════════
+local lastSavedContent = ""
+task.spawn(function()
+    while GUI.Parent do
+        if AutoSaveEnabled and SaveDataEnabled and LastSaveName ~= "" then
+            local ok, content = pcall(SerializeToggles)
+            if ok and content and content ~= "" and content ~= lastSavedContent then
+                local saved = SaveToName(LastSaveName, content)
+                if saved then
+                    lastSavedContent = content
+                    local meta = ReadMetaFile()
+                    meta.LastSaveName = LastSaveName
+                    WriteMetaFile(meta)
+                    print("[ADEX AUTO SAVE] Tersimpan otomatis ke '" .. LastSaveName .. "'")
+                end
+            end
+        end
+        task.wait(1.5)
+    end
+end)
+-- ══════════════════════════════════════════════════════════════════════════
+
 GUI.Destroying:Connect(function()
     if LoadingConnection then
         LoadingConnection:Disconnect()
@@ -3956,42 +4060,9 @@ GUI.Destroying:Connect(function()
     pcall(function()
         RunService:UnbindFromRenderStep("ADEX_AutoGenKiller")
     end)
+    pcall(function()
+        RunService:UnbindFromRenderStep("ADEX_HalloweenKiller")
+    end)
 
     pcall(ADEX_RunAllCleanups)
-end)
-
--- ══════════════════════════════════════════════════════════════════════════
--- ▼▼▼ MODULE LOADER (NEW) — load script/Nama1.lua, Nama2.lua, dll ▼▼▼
--- ══════════════════════════════════════════════════════════════════════════
-task.defer(function()
-    if type(RemoteSettings.Modules) ~= "table" then return end
-    for _, modName in ipairs(RemoteSettings.Modules) do
-        if type(modName) == "string" and modName ~= "" then
-            task.spawn(function()
-                local ok, err = pcall(function()
-                    local url = SETTINGS_BASE .. "/script/" .. modName .. ".lua"
-                    local body = httpGet(url)
-                    if not body then
-                        warn("[ADEX MODULE] Gagal fetch: " .. modName)
-                        return
-                    end
-                    local loader = loadstring or load
-                    if not loader then
-                        warn("[ADEX MODULE] loadstring/load tidak tersedia: " .. modName)
-                        return
-                    end
-                    local fn = loader(body)
-                    if fn then
-                        print("[ADEX MODULE] Loaded: " .. modName)
-                        fn()
-                    else
-                        warn("[ADEX MODULE] Gagal compile: " .. modName)
-                    end
-                end)
-                if not ok then
-                    warn("[ADEX MODULE] Error loading " .. tostring(modName) .. ": " .. tostring(err))
-                end
-            end)
-        end
-    end
 end)
