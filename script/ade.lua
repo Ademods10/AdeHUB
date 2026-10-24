@@ -51,7 +51,6 @@ pcall(function() RunService:UnbindFromRenderStep("ADEX_NicknameKiller") end)
 pcall(function() RunService:UnbindFromRenderStep("ADEX_CrosshairKiller") end)
 pcall(function() RunService:UnbindFromRenderStep("ADEX_GeneratorKiller") end)
 pcall(function() RunService:UnbindFromRenderStep("ADEX_AutoGenKiller") end)
-pcall(function() RunService:UnbindFromRenderStep("ADEX_HalloweenKiller") end)
 
 pcall(function()
     local old = CoreGui:FindFirstChild("ADEX_MODERN_HUB")
@@ -1169,7 +1168,6 @@ local SavesMemory = {}
 local IndexMemory = {}
 
 local SaveDataEnabled = false
-local AutoSaveEnabled = false
 local AutoLoadEnabled = false
 local LastSaveName = ""
 
@@ -1969,54 +1967,335 @@ ADEX_NicknameToggle = AddToggle(Visuals, "Esp Nickname", "Nama pemain • Small 
     end
 end)
 
--- ══════════════════════════════════════════════════════════════════════════
--- ▼▼▼ FITUR: ESP LABU (HALLOWEEN) ▼▼▼
--- ══════════════════════════════════════════════════════════════════════════
-local ADEX_HalloweenLoaded = false
-local ADEX_HalloweenEnabled = false
-local ADEX_HalloweenToggle = nil
+local ADEX_GeneratorLoaded = false
+local ADEX_GeneratorEnabled = false
+local ADEX_GeneratorToggle = nil
 
-ADEX_HalloweenToggle = AddToggle(Visuals, "Esp Labu (Halloween)", "Highlight lokasi Pumpkin/Labu.", false, function(enabled)
-    ADEX_HalloweenEnabled = enabled
+ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • Persentase generator.", false, function(enabled)
+    ADEX_GeneratorEnabled = enabled
 
-    if enabled and not ADEX_HalloweenLoaded then
-        ADEX_HalloweenLoaded = true
+    if enabled and not ADEX_GeneratorLoaded then
+        ADEX_GeneratorLoaded = true
 
         local Workspace = game:GetService("Workspace")
-        local HIGHLIGHT_COLOR = Color3.fromRGB(255, 140, 0)
 
-        local function CreatePumpkinESP(obj)
-            if not obj or not obj.Parent then return end
-            if obj:FindFirstChild("ADEX_PumpkinESP", true) then return end
+        local MAX_DISTANCE = 1000
+        local VALUE_NAME = "RepairProgress"
+        local PERCENT_TEXT_SIZE = 14
+        local PERCENT_HEIGHT = 4
 
-            local highlight = Instance.new("Highlight")
-            highlight.Name = "ADEX_PumpkinESP"
-            highlight.Adornee = obj
-            highlight.FillColor = HIGHLIGHT_COLOR
-            highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-            highlight.FillTransparency = 0.5
-            highlight.OutlineTransparency = 0
-            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-            highlight.Parent = obj
+        local function FormatPercent(value)
+            value = tonumber(value)
+            if not value then return nil end
+            return math.clamp(math.floor(value + 0.5), 0, 100)
         end
 
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj.Name:lower():find("pumpkin") or obj.Name:lower():find("labu") then
-                CreatePumpkinESP(obj)
+        local function GetPart(generator)
+            if generator:IsA("BasePart") then
+                return generator
+            end
+            if generator:IsA("Model") then
+                return generator.PrimaryPart
+                    or generator:FindFirstChildWhichIsA("BasePart", true)
+            end
+            return nil
+        end
+
+        local function FindRepairProgress(generator)
+            local value = generator:FindFirstChild(VALUE_NAME, true)
+            if value and value:IsA("ValueBase") then
+                return value, "Value"
+            end
+
+            if generator:GetAttribute(VALUE_NAME) ~= nil then
+                return generator, "Attribute"
+            end
+
+            for _, object in ipairs(generator:GetDescendants()) do
+                if object:GetAttribute(VALUE_NAME) ~= nil then
+                    return object, "Attribute"
+                end
+            end
+
+            return nil
+        end
+
+        local function CreateESP(generator)
+            if not generator or not generator.Parent then return end
+
+            local part = GetPart(generator)
+            if not part then return end
+
+            -- Dedup recursive (cek seluruh hierarki generator)
+            if generator:FindFirstChild("ADEX_GeneratorESP", true)
+                or generator:FindFirstChild("ADEX_GeneratorPercent", true) then
+                return
+            end
+
+            local progress, source = FindRepairProgress(generator)
+
+            -- Kalau RepairProgress belum ada, tunggu sampai muncul
+            if not progress then
+                local resolved = false
+                local watchConn
+                watchConn = generator.DescendantAdded:Connect(function()
+                    if resolved then return end
+                    local p = FindRepairProgress(generator)
+                    if p then
+                        resolved = true
+                        pcall(function() watchConn:Disconnect() end)
+                        if generator.Parent then
+                            task.wait(0.1)
+                            CreateESP(generator)
+                        end
+                    end
+                end)
+                task.delay(30, function()
+                    if not resolved and watchConn then
+                        pcall(function() watchConn:Disconnect() end)
+                    end
+                end)
+                return
+            end
+
+            local highlight = Instance.new("Highlight")
+            highlight.Name = "ADEX_GeneratorESP"
+            highlight.Adornee = generator
+            highlight.FillColor = Color3.fromRGB(255, 190, 0)
+            highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+            highlight.FillTransparency = 0.55
+            highlight.OutlineTransparency = 0
+            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            highlight.Parent = part
+
+            -- Pakai Model sebagai adornee → posisi stabil (tidak ikut part beranimasi)
+            local billboard = Instance.new("BillboardGui")
+            billboard.Name = "ADEX_GeneratorPercent"
+            billboard.Adornee = generator
+            billboard.Size = UDim2.fromOffset(120, 25)
+            billboard.StudsOffset = Vector3.new(0, PERCENT_HEIGHT, 0)
+            billboard.AlwaysOnTop = true
+            billboard.MaxDistance = MAX_DISTANCE
+            billboard.Parent = part
+
+            local label = Instance.new("TextLabel")
+            label.Name = "Percentage"
+            label.Size = UDim2.fromScale(1, 1)
+            label.BackgroundTransparency = 1
+            label.Text = "0%"
+            label.TextSize = PERCENT_TEXT_SIZE
+            label.Font = Enum.Font.GothamBold
+            label.TextColor3 = Color3.fromRGB(255, 80, 70)
+            label.TextStrokeTransparency = 0
+            label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+            label.TextXAlignment = Enum.TextXAlignment.Center
+            label.TextYAlignment = Enum.TextYAlignment.Center
+            label.Parent = billboard
+
+            local lastPercent = 0
+            local currentProgress = progress
+            local currentSource = source
+            local valueConn
+
+            local function Update()
+                -- Kalau RepairProgress dihapus (umum saat 100%), tampilkan nilai terakhir
+                if not currentProgress or not currentProgress.Parent then
+                    local p, s = FindRepairProgress(generator)
+                    if p then
+                        currentProgress = p
+                        currentSource = s
+                        if valueConn then
+                            pcall(function() valueConn:Disconnect() end)
+                        end
+                        if currentSource == "Value" then
+                            valueConn = currentProgress:GetPropertyChangedSignal("Value"):Connect(Update)
+                        else
+                            valueConn = currentProgress:GetAttributeChangedSignal(VALUE_NAME):Connect(Update)
+                        end
+                    else
+                        return -- tetap tampilkan lastPercent (mis. 100%)
+                    end
+                end
+
+                local rawValue
+                if currentSource == "Value" then
+                    rawValue = currentProgress.Value
+                else
+                    rawValue = currentProgress:GetAttribute(VALUE_NAME)
+                end
+
+                local percent = FormatPercent(rawValue)
+                if percent == nil then
+                    label.Text = lastPercent .. "%"
+                    return
+                end
+
+                lastPercent = percent
+                label.Text = percent .. "%"
+
+                if percent >= 100 then
+                    label.TextColor3 = Color3.fromRGB(50, 255, 100)
+                elseif percent >= 50 then
+                    label.TextColor3 = Color3.fromRGB(255, 220, 50)
+                else
+                    label.TextColor3 = Color3.fromRGB(255, 80, 70)
+                end
+            end
+
+            if currentSource == "Value" then
+                valueConn = currentProgress:GetPropertyChangedSignal("Value"):Connect(Update)
+            else
+                valueConn = currentProgress:GetAttributeChangedSignal(VALUE_NAME):Connect(Update)
+            end
+
+            Update()
+        end
+
+        for _, object in ipairs(Workspace:GetDescendants()) do
+            if object.Name == "Generator" then
+                CreateESP(object)
             end
         end
 
-        Workspace.DescendantAdded:Connect(function(obj)
-            if not ADEX_HalloweenEnabled then return end
-            if obj.Name:lower():find("pumpkin") or obj.Name:lower():find("labu") then
+        Workspace.DescendantAdded:Connect(function(object)
+            if object.Name == "Generator" then
                 task.wait(0.2)
-                CreatePumpkinESP(obj)
+                CreateESP(object)
             end
         end)
 
+        pcall(function()
+            RunService:UnbindFromRenderStep("ADEX_GeneratorKiller")
+        end)
+        pcall(function()
+            RunService:BindToRenderStep("ADEX_GeneratorKiller", Enum.RenderPriority.Last.Value, function()
+                if not GUI or not GUI.Parent then
+                    pcall(function()
+                        RunService:UnbindFromRenderStep("ADEX_GeneratorKiller")
+                    end)
+                    return
+                end
+
+                if ADEX_GeneratorEnabled then
+                    return
+                end
+
+                for _, obj in ipairs(Workspace:GetDescendants()) do
+                    if obj.Name == "ADEX_GeneratorESP" or obj.Name == "ADEX_GeneratorPercent" then
+                        -- Highlight tidak punya .Enabled → pakai transparency
+                        if obj:IsA("Highlight") then
+                            obj.FillTransparency = 1
+                            obj.OutlineTransparency = 1
+                        elseif obj:IsA("BillboardGui") then
+                            obj.Enabled = false
+                        end
+                    end
+                end
+            end)
+        end)
+
         ADEX_RegisterCleanup(function()
-            if ADEX_HalloweenToggle then ADEX_HalloweenToggle.Set(false) end
-            ADEX_HalloweenEnabled = false
+            if ADEX_GeneratorToggle then ADEX_GeneratorToggle.Set(false) end
+            ADEX_GeneratorEnabled = false
+
+            for _, obj in ipairs(Workspace:GetDescendants()) do
+                if obj.Name == "ADEX_GeneratorESP" or obj.Name == "ADEX_GeneratorPercent" then
+                    pcall(function() obj:Destroy() end)
+                end
+            end
+        end)
+    end
+end)
+
+local ADEX_PumpkinLoaded = false
+local ADEX_PumpkinEnabled = false
+local ADEX_PumpkinToggle = nil
+
+ADEX_PumpkinToggle = AddToggle(Visuals, "Esp Pumpkin", "Halloween Event • Lokasi pumpkin di map.", false, function(enabled)
+    ADEX_PumpkinEnabled = enabled
+
+    if enabled and not ADEX_PumpkinLoaded then
+        ADEX_PumpkinLoaded = true
+
+        local Workspace = game:GetService("Workspace")
+
+        local function IsPumpkin(obj)
+            if not obj or not obj.Parent then return false end
+            if obj.Name == "ADEX_PumpkinESP" then return false end
+            local name = string.lower(obj.Name)
+            return name:find("pumpkin") ~= nil
+        end
+
+        local function GetPart(pumpkin)
+            if pumpkin:IsA("BasePart") then
+                return pumpkin
+            elseif pumpkin:IsA("Model") then
+                return pumpkin.PrimaryPart or pumpkin:FindFirstChildWhichIsA("BasePart", true)
+            end
+            return nil
+        end
+
+        local function CreateESP(pumpkin)
+            if not pumpkin or not pumpkin.Parent then return end
+
+            if pumpkin:FindFirstChild("ADEX_PumpkinESP", true) then
+                return
+            end
+
+            local part = GetPart(pumpkin)
+            if not part then return end
+
+            local highlight = Instance.new("Highlight")
+            highlight.Name = "ADEX_PumpkinESP"
+            highlight.Adornee = pumpkin
+            highlight.FillColor = Color3.fromRGB(255, 140, 0)
+            highlight.OutlineColor = Color3.fromRGB(255, 220, 100)
+            highlight.FillTransparency = 0.55
+            highlight.OutlineTransparency = 0
+            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            highlight.Parent = part
+        end
+
+        for _, object in ipairs(Workspace:GetDescendants()) do
+            if IsPumpkin(object) then
+                CreateESP(object)
+            end
+        end
+
+        Workspace.DescendantAdded:Connect(function(object)
+            if IsPumpkin(object) then
+                task.wait(0.2)
+                CreateESP(object)
+            end
+        end)
+
+        pcall(function()
+            RunService:UnbindFromRenderStep("ADEX_PumpkinKiller")
+        end)
+        pcall(function()
+            RunService:BindToRenderStep("ADEX_PumpkinKiller", Enum.RenderPriority.Last.Value, function()
+                if not GUI or not GUI.Parent then
+                    pcall(function()
+                        RunService:UnbindFromRenderStep("ADEX_PumpkinKiller")
+                    end)
+                    return
+                end
+                if ADEX_PumpkinEnabled then return end
+                for _, obj in ipairs(Workspace:GetDescendants()) do
+                    if obj.Name == "ADEX_PumpkinESP" then
+                        if obj:IsA("Highlight") then
+                            obj.FillTransparency = 1
+                            obj.OutlineTransparency = 1
+                        end
+                    end
+                end
+            end)
+        end)
+
+        ADEX_RegisterCleanup(function()
+            if ADEX_PumpkinToggle then ADEX_PumpkinToggle.Set(false) end
+            ADEX_PumpkinEnabled = false
+
             for _, obj in ipairs(Workspace:GetDescendants()) do
                 if obj.Name == "ADEX_PumpkinESP" then
                     pcall(function() obj:Destroy() end)
@@ -2025,211 +2304,6 @@ ADEX_HalloweenToggle = AddToggle(Visuals, "Esp Labu (Halloween)", "Highlight lok
         end)
     end
 end)
--- ══════════════════════════════════════════════════════════════════════════
-
--- ══════════════════════════════════════════════════════════════════════════
--- ▼▼▼ FITUR: ESP GENERATOR (FIXED) ▼▼▼
--- ══════════════════════════════════════════════════════════════════════════
-local ADEX_GeneratorLoaded = false
-local ADEX_GeneratorEnabled = false
-local ADEX_GeneratorToggle = nil
-
-ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • Persentase generator.", false, function(enabled)
-    ADEX_GeneratorEnabled = enabled
-    local Workspace = game:GetService("Workspace")
-    local MAX_DISTANCE = 1000
-    local VALUE_NAME = "RepairProgress"
-
-    local function FormatPercent(value)
-        value = tonumber(value)
-        if not value then return nil end
-        return math.clamp(math.floor(value + 0.5), 0, 100)
-    end
-
-    local function FindRepairProgress(generator)
-        local value = generator:FindFirstChild(VALUE_NAME, true)
-        if value and value:IsA("ValueBase") then
-            return value, "Value"
-        end
-        if generator:GetAttribute(VALUE_NAME) ~= nil then
-            return generator, "Attribute"
-        end
-        for _, object in ipairs(generator:GetDescendants()) do
-            if object:GetAttribute(VALUE_NAME) ~= nil then
-                return object, "Attribute"
-            end
-        end
-        return nil
-    end
-
-    local function CreateESP(generator)
-        if not generator or not generator.Parent then return end
-        if generator:FindFirstChild("ADEX_GeneratorESP", true) then return end
-
-        local highlight = Instance.new("Highlight")
-        highlight.Name = "ADEX_GeneratorESP"
-        highlight.Adornee = generator
-        highlight.FillColor = Color3.fromRGB(255, 190, 0)
-        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-        highlight.FillTransparency = 0.55
-        highlight.OutlineTransparency = 0
-        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        highlight.Parent = generator
-
-        -- Dummy Part di tengah Bounding Box (Bukan Pivot) agar tidak ikut piston
-        local cf, size = generator:GetBoundingBox()
-        local dummy = Instance.new("Part")
-        dummy.Name = "ADEX_GeneratorDummy"
-        dummy.Anchored = true
-        dummy.CanCollide = false
-        dummy.Transparency = 1
-        dummy.Size = Vector3.new(1, 1, 1)
-        dummy.CFrame = CFrame.new(cf.Position + Vector3.new(0, size.Y / 2 + 2, 0)) -- Di atas generator
-        dummy.Parent = generator
-
-        local billboard = Instance.new("BillboardGui")
-        billboard.Name = "ADEX_GeneratorPercent"
-        billboard.Adornee = dummy
-        billboard.Size = UDim2.fromOffset(120, 25)
-        billboard.AlwaysOnTop = true
-        billboard.MaxDistance = MAX_DISTANCE
-        billboard.Parent = dummy
-
-        local label = Instance.new("TextLabel")
-        label.Name = "Percentage"
-        label.Size = UDim2.fromScale(1, 1)
-        label.BackgroundTransparency = 1
-        label.Text = "0%"
-        label.TextSize = 14
-        label.Font = Enum.Font.GothamBold
-        label.TextColor3 = Color3.fromRGB(255, 80, 70)
-        label.TextStrokeTransparency = 0
-        label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-        label.TextXAlignment = Enum.TextXAlignment.Center
-        label.TextYAlignment = Enum.TextYAlignment.Center
-        label.Parent = billboard
-
-        local lastPercent = 0
-        local currentProgress, currentSource
-        local valueConn
-
-        local function Update()
-            if not currentProgress or not currentProgress.Parent then
-                local p, s = FindRepairProgress(generator)
-                if p then
-                    currentProgress = p
-                    currentSource = s
-                    if valueConn then pcall(function() valueConn:Disconnect() end) end
-                    if currentSource == "Value" then
-                        valueConn = currentProgress:GetPropertyChangedSignal("Value"):Connect(Update)
-                    else
-                        valueConn = currentProgress:GetAttributeChangedSignal(VALUE_NAME):Connect(Update)
-                    end
-                else
-                    -- Jika sudah 100% (value dihapus game), paksa tampil 100% dan update dummy
-                    lastPercent = 100
-                    label.Text = "100%"
-                    label.TextColor3 = Color3.fromRGB(50, 255, 100)
-                    if dummy and dummy.Parent then
-                        local newCf, newSize = generator:GetBoundingBox()
-                        dummy.CFrame = CFrame.new(newCf.Position + Vector3.new(0, newSize.Y / 2 + 2, 0))
-                    end
-                    return
-                end
-            end
-
-            local rawValue = currentSource == "Value" and currentProgress.Value or currentProgress:GetAttribute(VALUE_NAME)
-            local percent = FormatPercent(rawValue)
-            if percent == nil then
-                label.Text = lastPercent .. "%"
-                return
-            end
-            lastPercent = percent
-            label.Text = percent .. "%"
-            if percent >= 100 then
-                label.TextColor3 = Color3.fromRGB(50, 255, 100)
-            elseif percent >= 50 then
-                label.TextColor3 = Color3.fromRGB(255, 220, 50)
-            else
-                label.TextColor3 = Color3.fromRGB(255, 80, 70)
-            end
-
-            -- Update posisi dummy agar selalu di atas generator (jaga-jaga jika generator bergerak)
-            if dummy and dummy.Parent then
-                local newCf, newSize = generator:GetBoundingBox()
-                dummy.CFrame = CFrame.new(newCf.Position + Vector3.new(0, newSize.Y / 2 + 2, 0))
-            end
-        end
-
-        local progress, source = FindRepairProgress(generator)
-        if progress then
-            currentProgress = progress
-            currentSource = source
-            if currentSource == "Value" then
-                valueConn = currentProgress:GetPropertyChangedSignal("Value"):Connect(Update)
-            else
-                valueConn = currentProgress:GetAttributeChangedSignal(VALUE_NAME):Connect(Update)
-            end
-            Update()
-        else
-            local resolved = false
-            local watchConn = generator.DescendantAdded:Connect(function()
-                if resolved then return end
-                local p, s = FindRepairProgress(generator)
-                if p then
-                    resolved = true
-                    pcall(function() watchConn:Disconnect() end)
-                    currentProgress = p
-                    currentSource = s
-                    if currentSource == "Value" then
-                        valueConn = currentProgress:GetPropertyChangedSignal("Value"):Connect(Update)
-                    else
-                        valueConn = currentProgress:GetAttributeChangedSignal(VALUE_NAME):Connect(Update)
-                    end
-                    Update()
-                end
-            end)
-        end
-    end
-
-    if not enabled then
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj.Name == "ADEX_GeneratorESP" or obj.Name == "ADEX_GeneratorPercent" or obj.Name == "ADEX_GeneratorDummy" then
-                pcall(function() obj:Destroy() end)
-            end
-        end
-        return
-    end
-
-    -- Saat ON, buat ESP untuk semua Generator
-    for _, object in ipairs(Workspace:GetDescendants()) do
-        if object.Name == "Generator" then
-            CreateESP(object)
-        end
-    end
-
-    if not ADEX_GeneratorLoaded then
-        ADEX_GeneratorLoaded = true
-        Workspace.DescendantAdded:Connect(function(object)
-            if object.Name == "Generator" and ADEX_GeneratorEnabled then
-                task.wait(0.2)
-                CreateESP(object)
-            end
-        end)
-    end
-end)
-
-ADEX_RegisterCleanup(function()
-    if ADEX_GeneratorToggle then ADEX_GeneratorToggle.Set(false) end
-    ADEX_GeneratorEnabled = false
-    local Workspace = game:GetService("Workspace")
-    for _, obj in ipairs(Workspace:GetDescendants()) do
-        if obj.Name == "ADEX_GeneratorESP" or obj.Name == "ADEX_GeneratorPercent" or obj.Name == "ADEX_GeneratorDummy" then
-            pcall(function() obj:Destroy() end)
-        end
-    end
-end)
--- ══════════════════════════════════════════════════════════════════════════
 
 local ADEX_AutoGenLoaded = false
 local ADEX_AutoGenEnabled = false
@@ -2862,7 +2936,6 @@ AddLabel(Settings, "Keybind", "RightShift = Minimize / Restore")
 AddSection(Settings, "SAVE SYSTEM")
 
 SaveDataEnabled = (ADEX_InitialMeta.SaveData == "true")
-AutoSaveEnabled = (ADEX_InitialMeta.AutoSave == "true")
 AutoLoadEnabled = (ADEX_InitialMeta.AutoLoad == "true")
 LastSaveName = ADEX_InitialMeta.LastSaveName or ""
 
@@ -2870,13 +2943,6 @@ AddToggle(Settings, "Save Data", "Aktifkan fitur simpan data.", SaveDataEnabled,
     SaveDataEnabled = v
     local meta = ReadMetaFile()
     meta.SaveData = tostring(v)
-    WriteMetaFile(meta)
-end, true)
-
-AddToggle(Settings, "Auto Save", "Simpan otomatis saat ada perubahan.", AutoSaveEnabled, function(v)
-    AutoSaveEnabled = v
-    local meta = ReadMetaFile()
-    meta.AutoSave = tostring(v)
     WriteMetaFile(meta)
 end, true)
 
@@ -3908,30 +3974,6 @@ LoadingConnection = RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ══════════════════════════════════════════════════════════════════════════
--- ▼▼▼ FIX: LOOP AUTO SAVE ▼▼▼
--- ══════════════════════════════════════════════════════════════════════════
-local lastSavedContent = ""
-task.spawn(function()
-    while GUI.Parent do
-        if AutoSaveEnabled and SaveDataEnabled and LastSaveName ~= "" then
-            local ok, content = pcall(SerializeToggles)
-            if ok and content and content ~= "" and content ~= lastSavedContent then
-                local saved = SaveToName(LastSaveName, content)
-                if saved then
-                    lastSavedContent = content
-                    local meta = ReadMetaFile()
-                    meta.LastSaveName = LastSaveName
-                    WriteMetaFile(meta)
-                    print("[ADEX AUTO SAVE] Tersimpan otomatis ke '" .. LastSaveName .. "'")
-                end
-            end
-        end
-        task.wait(1.5)
-    end
-end)
--- ══════════════════════════════════════════════════════════════════════════
-
 GUI.Destroying:Connect(function()
     if LoadingConnection then
         LoadingConnection:Disconnect()
@@ -3970,10 +4012,10 @@ GUI.Destroying:Connect(function()
         RunService:UnbindFromRenderStep("ADEX_GeneratorKiller")
     end)
     pcall(function()
-        RunService:UnbindFromRenderStep("ADEX_AutoGenKiller")
+        RunService:UnbindFromRenderStep("ADEX_PumpkinKiller")
     end)
     pcall(function()
-        RunService:UnbindFromRenderStep("ADEX_HalloweenKiller")
+        RunService:UnbindFromRenderStep("ADEX_AutoGenKiller")
     end)
 
     pcall(ADEX_RunAllCleanups)
