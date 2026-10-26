@@ -1974,15 +1974,43 @@ local ADEX_GeneratorToggle = nil
 ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • Persentase generator.", false, function(enabled)
     ADEX_GeneratorEnabled = enabled
 
+    if not enabled then
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj.Name == "ADEX_GeneratorESP" then
+                if obj:IsA("Highlight") then
+                    obj.FillTransparency = 1
+                    obj.OutlineTransparency = 1
+                end
+            elseif obj.Name == "ADEX_GeneratorPercent" then
+                if obj:IsA("BillboardGui") then
+                    obj.Enabled = false
+                end
+            end
+        end
+        return
+    end
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj.Name == "ADEX_GeneratorESP" then
+            if obj:IsA("Highlight") then
+                obj.FillTransparency = 0.55
+                obj.OutlineTransparency = 0
+            end
+        elseif obj.Name == "ADEX_GeneratorPercent" then
+            if obj:IsA("BillboardGui") then
+                obj.Enabled = true
+            end
+        end
+    end
+
     if enabled and not ADEX_GeneratorLoaded then
         ADEX_GeneratorLoaded = true
 
         local Workspace = game:GetService("Workspace")
-
         local MAX_DISTANCE = 1000
         local VALUE_NAME = "RepairProgress"
         local PERCENT_TEXT_SIZE = 14
-        local PERCENT_HEIGHT = 2.2 -- Diturunkan dari 4 ke 2.2 agar teks lebih dekat ke generator
+        local PERCENT_HEIGHT = 2.2
 
         local function FormatPercent(value)
             value = tonumber(value)
@@ -1995,41 +2023,42 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
             if value and value:IsA("ValueBase") then
                 return value, "Value"
             end
-
             if generator:GetAttribute(VALUE_NAME) ~= nil then
                 return generator, "Attribute"
             end
-
             for _, object in ipairs(generator:GetDescendants()) do
                 if object:GetAttribute(VALUE_NAME) ~= nil then
                     return object, "Attribute"
                 end
             end
-
             return nil
+        end
+
+        local function IsHighestGenerator(obj)
+            if obj.Name ~= "Generator" then return false end
+            local p = obj.Parent
+            while p and p ~= Workspace do
+                if p.Name == "Generator" then
+                    return false
+                end
+                p = p.Parent
+            end
+            return true
         end
 
         local function CreateESP(generator)
             if not generator or not generator.Parent then return end
 
-            -- Dedup recursive (cek seluruh hierarki generator)
             if generator:FindFirstChild("ADEX_GeneratorESP", true)
                 or generator:FindFirstChild("ADEX_GeneratorPercent", true) then
                 return
             end
 
-            -- Cek parent di atasnya untuk mencegah duplikasi (misal part bernama Generator di dalam Model Generator)
-            local checkParent = generator.Parent
-            while checkParent and checkParent ~= Workspace do
-                if checkParent.Name == "Generator" and checkParent:FindFirstChild("ADEX_GeneratorESP", true) then
-                    return
-                end
-                checkParent = checkParent.Parent
-            end
+            local part = generator:IsA("Model") and (generator.PrimaryPart or generator:FindFirstChildWhichIsA("BasePart", true)) or generator
+            if not part then return end
 
             local progress, source = FindRepairProgress(generator)
 
-            -- Kalau RepairProgress belum ada, tunggu sampai muncul
             if not progress then
                 local resolved = false
                 local watchConn
@@ -2061,7 +2090,7 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
             highlight.FillTransparency = 0.55
             highlight.OutlineTransparency = 0
             highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-            highlight.Parent = generator -- Parent ke generator langsung agar stabil
+            highlight.Parent = part
 
             local billboard = Instance.new("BillboardGui")
             billboard.Name = "ADEX_GeneratorPercent"
@@ -2070,7 +2099,7 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
             billboard.StudsOffset = Vector3.new(0, PERCENT_HEIGHT, 0)
             billboard.AlwaysOnTop = true
             billboard.MaxDistance = MAX_DISTANCE
-            billboard.Parent = generator -- Parent ke generator langsung
+            billboard.Parent = part
 
             local label = Instance.new("TextLabel")
             label.Name = "Percentage"
@@ -2092,7 +2121,6 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
             local valueConn
 
             local function Update()
-                -- Kalau RepairProgress dihapus (umum saat 100%), tampilkan nilai terakhir
                 if not currentProgress or not currentProgress.Parent then
                     local p, s = FindRepairProgress(generator)
                     if p then
@@ -2107,7 +2135,7 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
                             valueConn = currentProgress:GetAttributeChangedSignal(VALUE_NAME):Connect(Update)
                         end
                     else
-                        return -- tetap tampilkan lastPercent (mis. 100%)
+                        return
                     end
                 end
 
@@ -2146,13 +2174,13 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
         end
 
         for _, object in ipairs(Workspace:GetDescendants()) do
-            if object.Name == "Generator" then
+            if IsHighestGenerator(object) then
                 CreateESP(object)
             end
         end
 
         Workspace.DescendantAdded:Connect(function(object)
-            if object.Name == "Generator" then
+            if IsHighestGenerator(object) then
                 task.wait(0.2)
                 CreateESP(object)
             end
@@ -2169,14 +2197,9 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
                     end)
                     return
                 end
-
-                if ADEX_GeneratorEnabled then
-                    return
-                end
-
+                if ADEX_GeneratorEnabled then return end
                 for _, obj in ipairs(Workspace:GetDescendants()) do
                     if obj.Name == "ADEX_GeneratorESP" or obj.Name == "ADEX_GeneratorPercent" then
-                        -- Highlight tidak punya .Enabled → pakai transparency
                         if obj:IsA("Highlight") then
                             obj.FillTransparency = 1
                             obj.OutlineTransparency = 1
