@@ -2828,7 +2828,7 @@ ADEX_AutoGenToggle = AddToggle(Visuals, "Auto Generator", "Auto skill check (Nor
 
                 end
 
-                task.wait(0.005)
+                task.wait((Enabled and ScourgeActive and Mode == "INSTANT") and 0.005 or 0.1)
 
             end
 
@@ -2913,7 +2913,6 @@ ADEX_AutoGenToggle = AddToggle(Visuals, "Auto Generator", "Auto skill check (Nor
             end
         end)
 
-        print("ABCD")
         print("AUTO GENERATOR v3")
         print("NORMAL SKILLCHECK : ENABLED")
         print("KING SCOURGE       : ENABLED")
