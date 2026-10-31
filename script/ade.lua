@@ -1542,7 +1542,7 @@ ADEX_EspBodyToggle = AddToggle(Visuals, "Esp Body", "Killer (Merah) / Survivor (
                 esp.Name = "ADEX_BodyESP"
                 esp.Adornee = character
                 esp.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                esp.FillTransparency = 0.55
+                esp.FillTransparency = 1
                 esp.OutlineTransparency = 0
                 esp.Parent = character
             end
@@ -1608,7 +1608,7 @@ ADEX_EspBodyToggle = AddToggle(Visuals, "Esp Body", "Killer (Merah) / Survivor (
                 return
             end
 
-            local fill = ADEX_EspBodyEnabled and 0.55 or 1
+            local fill = 1
             local outline = ADEX_EspBodyEnabled and 0 or 1
 
             for _, p in ipairs(Players:GetPlayers()) do
@@ -1993,7 +1993,7 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj.Name == "ADEX_GeneratorESP" then
             if obj:IsA("Highlight") then
-                obj.FillTransparency = 0.55
+                obj.FillTransparency = 1
                 obj.OutlineTransparency = 0
             end
         elseif obj.Name == "ADEX_GeneratorPercent" then
@@ -2087,7 +2087,7 @@ ADEX_GeneratorToggle = AddToggle(Visuals, "Esp Generator", "Repair Progress • 
             highlight.Adornee = generator
             highlight.FillColor = Color3.fromRGB(255, 190, 0)
             highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-            highlight.FillTransparency = 0.55
+            highlight.FillTransparency = 1
             highlight.OutlineTransparency = 0
             highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
             highlight.Parent = part
@@ -2267,7 +2267,7 @@ ADEX_PumpkinToggle = AddToggle(Visuals, "Esp Pumpkin", "Halloween Event • Loka
             highlight.Adornee = pumpkin
             highlight.FillColor = Color3.fromRGB(255, 140, 0)
             highlight.OutlineColor = Color3.fromRGB(255, 220, 100)
-            highlight.FillTransparency = 0.55
+            highlight.FillTransparency = 1
             highlight.OutlineTransparency = 0
             highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
             highlight.Parent = part
